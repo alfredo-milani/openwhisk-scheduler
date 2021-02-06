@@ -1,0 +1,9 @@
+[18-01-2021] - Sono stati aggiunti 3 helm templates:
+    - ${PROJ}/FaaS/OpenWhisk/openwhisk-scheduler/res/openwhisk-deploy-kube/helm/openwhisk/templates/scheduler-pod.yaml
+    - ${PROJ}/FaaS/OpenWhisk/openwhisk-scheduler/res/openwhisk-deploy-kube/helm/openwhisk/templates/scheduler-pvc.yaml
+    - ${PROJ}/FaaS/OpenWhisk/openwhisk-scheduler/res/openwhisk-deploy-kube/helm/openwhisk/templates/scheduler-svc.yaml
+
+Tali templates sono stati basati su:
+    - /Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/res/openwhisk-deploy-kube/helm/openwhisk/templates/redis-pod.yaml
+    - /Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/res/openwhisk-deploy-kube/helm/openwhisk/templates/redis-pvc.yaml
+    - /Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/res/openwhisk-deploy-kube/helm/openwhisk/templates/redis-svc.yaml

@@ -1,0 +1,33 @@
+Questo file contiene un summary delle modifiche effettuate alla code base di Apache OpenWhisk (directory openwhisk-priority-queue).
+
+- pqv1
+    - Descrizione: tutte le activation sono inoltrate nel topic 'to_dispatch'
+    - Modifiche: CommonLoadBalancer#sendActivationToInvoker
+
+- pqv2
+    - Descrizione: tutte le activation sono inoltrate nel topic 'scheduler' e nella activation è aggiunto il campo { "target": "invokerN" } in content
+    - Modifiche: CommonLoadBalancer#sendActivationToInvoker, ShardingContainerPoolBalancer#publish
+
+- pqv3
+    - Descrizione: tutte le activations sono inoltrate nel topic 'scheduler' e nel campo 'content' delle activations è aggiunto l'oggetto { "scheduler": { "target": "invokerN" } }
+    - Modifiche: CommonLoadBalancer#sendActivationToInvoker
+
+- pqv4
+    - Descrizione: bugfix -> i parametri passati come input delle actions venivano mergiati male con l'oggetto "scheduler"
+    - Modifiche: CommonLoadBalancer#sendActivationToInvoker
+
+- 0.0.6
+    - Descrizione: bugfix -> i parametri di ["scheduler"]["priority"] venivano sovrascritti
+    - Modifiche: CommonLoadBalancer#sendActivationToInvoker
+
+- 0.0.10
+    - Descrizione: il controller invia informazioni aggiuntive circa l'utilizzo di risorse: "content":{"$scheduler":{"limits":{"concurrency":10,"memory":256,"timeout":60000},"priority":12,"target":"invoker0"}}. Inoltre, effettua un double check per verificare che il contenuto del campo "content" contenga l'oggetto "$scheduler" necessario al funzionamento del nuovo componente ow-scheduler; quest'ultima modifica, effettuata sul metodo CommonLoadBalancer#sendActivationToInvoker, è resa necessaria dal momento che le activation di test bypassano il metodo ShardingContainerPoolBalancer#publish.
+    - Modifiche: 
+        - ShardingContainerPoolBalancer#publish
+        - CommonLoadBalancer#sendActivationToInvoker
+
+- 0.0.11
+    - Descrizione: il controller invia informazioni aggiuntive circa l'utilizzo di risorse: "content":{"$scheduler":{"limits":{"concurrency":10,"memory":256,"timeout":60000, "userMemory":2147483648},"priority":12,"target":"invoker0"}}. Inoltre, effettua un double check per verificare che il contenuto del campo "content" contenga l'oggetto "$scheduler" necessario al funzionamento del nuovo componente ow-scheduler; quest'ultima modifica, effettuata sul metodo CommonLoadBalancer#sendActivationToInvoker, è resa necessaria dal momento che le activation di test bypassano il metodo ShardingContainerPoolBalancer#publish.
+    - Modifiche: 
+        - ShardingContainerPoolBalancer#publish
+        - CommonLoadBalancer#sendActivationToInvoker

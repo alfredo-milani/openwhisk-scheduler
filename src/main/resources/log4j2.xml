@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" shutdownHook="disable">
+
+    <!-- Logger levels: ALL < TRACE < DEBUG < INFO < WARN < ERROR < FATAL < OFF -->
+
+    <Appenders>
+        <Console name="ConsoleAppender" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%-5p] | %d{dd-MM-yyyy HH:mm:ss} | [%t] %C{6} (%F:%L) - %m%n"/>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <Root level="INFO" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Root>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Logger>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ConsumableKafkaConsumer" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Logger>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Logger>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BaseScheduler" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Logger>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Logger>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler" additivity="false">
+            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        </Logger>
+    </Loggers>
+
+</Configuration>

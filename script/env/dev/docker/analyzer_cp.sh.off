@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+
+# TODO
+# - creare cartella esterna (o interna... da decidere) che contiene script di utility. 
+#   Questi scripts possono essere lanciati da comandi/alias definiti in bash_mod, ma non sono visibili a livello di PATH.
+#   bash_mod farebbe da wrapper/launcher per questi scripts
+# - il corrente script può essere utile per copiare files da/verso container
+
+
+
+# init environment (note: this line must be at the top script because bash expand aliases when reading lines)
+source "$(dirname "${BASH_SOURCE}")/env/load.sh" --check-dep --expand-aliases
+
+
+usage() {
+    cat <<EOF
+-c | --containerID
+    Specify containerID.
+-d | --destination
+    Specify destination directory of the copy.
+-h | --help
+    Show this help.
+-s | --source
+    Specify container source directory to copy.
+EOF
+}
+
+parse_input() {
+    while [[ ${#} -gt 0 ]]; do
+        case "${1}" in
+            -c | --containerID )
+                shift
+                [[ -n "${1}" ]] && CONTAINER_ID="${1}"
+                shift
+                ;;
+
+            -d | --destination )
+                shift
+                [[ -n "${1}" ]] && DESTINATION="${1}"
+                shift
+                ;;
+
+            help | HELP | -h | -H | --help | --HELP )
+                usage
+                exit 0
+                ;;
+
+            -s | --source )
+                shift
+                [[ -n "${1}" ]] && SOURCE="${1}"
+                shift
+                ;;
+
+            * )
+                _error "Unknown command \"${1}\"."
+                return 1
+                ;;
+        esac
+    done
+}
+
+validate_input() {
+    if [[ ! -e "${DESTINATION}" || ! -d "${DESTINATION}" ]]; then
+        _error "Destination *must* exists and be a valid directory."
+        return 1
+    fi
+}
+
+copy_imgs() {
+    CONTAINER_ID="$(dk-ps | grep "${SERVICE}" | awk '{ print $1 }')"
+    if [[ -z "${CONTAINER_ID}" ]]; then
+        _error "There is no container running for service ${SERVICE}."
+        return 1
+    fi
+    _info "Copying ${CONTAINER_ID}:${SOURCE} to ${DESTINATION}."
+    dk-cp "${CONTAINER_ID}:${SOURCE}" "${DESTINATION}" || return 1
+}
+
+main() {
+
+    local SERVICE='analyzer'
+    local CONTAINER_ID=''
+    local SOURCE='/home/openwhisk/imgs'
+    local DESTINATION='/Volumes/Ramdisk/imgs'
+
+    parse_input "${@}" || return 1
+
+    validate_input || return 1
+
+    copy_imgs
+
+}
+
+main "${@}"
