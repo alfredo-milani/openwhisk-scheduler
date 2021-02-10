@@ -378,6 +378,8 @@
         { "properties": { "port": { "type": "integer", "minimum": 0 } } },
         { "properties": { "replicaCount": { "const": 1 } } },
         { "properties": { "policy": { "type": "string" } }, "required": [ "policy" ] },
+        { "properties": { "tracing": { "type": "boolean" } } },
+        { "properties": { "buffering": { "type": "boolean" } } },
         { "properties": { "pollIntervalMs": { "type": "string" } } },
         { "properties": { "fetchMinBytes": { "type": "string" } } },
         { "properties": { "fetchMaxWaitMs": { "type": "string" } } },

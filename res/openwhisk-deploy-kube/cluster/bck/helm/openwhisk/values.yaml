@@ -687,16 +687,18 @@ redis:
 scheduler:
   external: false
   imageName: "ow-scheduler"
-  imageTag: "0.0.10"
+  imageTag: "0.0.11"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"
   host: null
   policy: pass_through
-  pollIntervalMs: "500"
-  fetchMinBytes: "5242880"
+  tracing: false
+  buffering: false
+  pollIntervalMs: "50"
+  fetchMinBytes: "1"
   fetchMaxWaitMs: "500"
-  maxPartitionFetchBytes: "5242880"
+  maxPartitionFetchBytes: "0"
   port: 8080
   persistence:
     size: 128Mi

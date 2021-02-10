@@ -71,13 +71,13 @@ controller:
 scheduler:
   external: false
   imageName: "ow-scheduler"
-  imageTag: "0.0.10"
+  imageTag: "0.0.11"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"
   host: null
-  policy: pass_through
-  # policy: priority_queue_fifo
+  # policy: pass_through
+  policy: priority_queue_fifo
   tracing: false
   buffering: true
   pollIntervalMs: "50"

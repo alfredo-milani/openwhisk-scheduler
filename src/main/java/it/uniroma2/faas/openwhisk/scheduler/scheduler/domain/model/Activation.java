@@ -289,14 +289,19 @@ public final class Activation implements ITraceable, IBufferizable {
             Map<String, Object> scheduler = (Map<String, Object>) this.content.get(K_SCHEDULER);
             if (scheduler != null) {
                 targetInvoker = (String) scheduler.get(K_SCHEDULER_TARGET);
-                priority = ((Number) scheduler.get(K_SCHEDULER_PRIORITY)).intValue();
+                Number priorityNumber = (Number) scheduler.get(K_SCHEDULER_PRIORITY);
+                if (priorityNumber != null) priority = priorityNumber.intValue();
                 overload = (Boolean) scheduler.get(K_SCHEDULER_OVERLOAD);
                 Map<String, Object> limits = (Map<String, Object>) scheduler.get(K_SCHEDULER_LIMITS);
                 if (limits != null) {
-                    concurrencyLimit = ((Number) limits.get(K_SCHEDULER_LIMITS_CONCURRENCY)).longValue();
-                    memoryLimit = ((Number) limits.get(K_SCHEDULER_LIMITS_MEMORY)).longValue();
-                    timeLimit = ((Number) limits.get(K_SCHEDULER_LIMITS_TIME)).longValue();
-                    userMemory = ((Number) limits.get(K_SCHEDULER_LIMITS_USER_MEMORY)).longValue();
+                    Number concurrencyNumber = (Number) limits.get(K_SCHEDULER_LIMITS_CONCURRENCY);
+                    if (concurrencyNumber != null) concurrencyLimit = concurrencyNumber.longValue();
+                    Number memoryLimitNumber = (Number) limits.get(K_SCHEDULER_LIMITS_MEMORY);
+                    if (memoryLimitNumber != null) memoryLimit = memoryLimitNumber.longValue();
+                    Number timeLimitNumber = (Number) limits.get(K_SCHEDULER_LIMITS_TIME);
+                    if (timeLimitNumber != null) timeLimit = timeLimitNumber.longValue();
+                    Number userMemoryNumber = (Number) limits.get(K_SCHEDULER_LIMITS_USER_MEMORY);
+                    if (userMemoryNumber != null) userMemory = userMemoryNumber.longValue();
                 }
             }
         }
