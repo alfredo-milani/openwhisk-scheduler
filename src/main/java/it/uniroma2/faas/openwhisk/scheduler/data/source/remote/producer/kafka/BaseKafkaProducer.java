@@ -2,7 +2,7 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.IConsumable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.KafkaException;
 import org.apache.logging.log4j.LogManager;

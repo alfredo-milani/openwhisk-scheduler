@@ -1,6 +1,8 @@
-package it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced;
+package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.IBufferizable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
@@ -10,15 +12,14 @@ import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer.COMPLETION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker.DEFAULT_INVOKER_USER_MEMORY;
 
-public class BufferedScheduler extends AdvancedScheduler {
+public class BufferedSchedulerMock extends AdvancedScheduler {
 
     private final static Logger LOG = LogManager.getLogger(BufferedScheduler.class.getCanonicalName());
 
@@ -28,7 +29,7 @@ public class BufferedScheduler extends AdvancedScheduler {
     //
     private final Queue<IBufferizable> bufferizableQueue = new ArrayDeque<>();
 
-    public BufferedScheduler(Scheduler scheduler) {
+    public BufferedSchedulerMock(Scheduler scheduler) {
         super(scheduler);
     }
 
@@ -97,7 +98,6 @@ public class BufferedScheduler extends AdvancedScheduler {
                         invoker.release(activationId);
                     }
                 }
-                // TODO: vedere se inviare elementi della coda
             }
         } else {
             LOG.trace("Pass through stream {}.", stream.toString());

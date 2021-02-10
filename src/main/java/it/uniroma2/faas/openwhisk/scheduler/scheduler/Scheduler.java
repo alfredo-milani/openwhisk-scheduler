@@ -17,6 +17,6 @@ public abstract class Scheduler implements IObserver {
     public abstract void unregister(@Nonnull List<ISubject> subjects);
 
     @Override
-    public abstract <T> void newEvent(@Nonnull UUID stream, @Nonnull final Collection<T> data);
+    public abstract void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data);
 
 }

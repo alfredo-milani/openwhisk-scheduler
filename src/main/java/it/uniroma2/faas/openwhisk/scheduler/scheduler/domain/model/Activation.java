@@ -1,9 +1,11 @@
-package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.IBufferizable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.ITraceable;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -14,7 +16,7 @@ import java.util.Map;
 import static com.google.common.base.Preconditions.checkArgument;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public final class Activation implements ISchedulable, ITraceable {
+public final class Activation implements ITraceable, IBufferizable {
 
     /*
     {
@@ -72,7 +74,7 @@ public final class Activation implements ISchedulable, ITraceable {
           "key0":"value0",
           "key1":"value1",
           "key2":"value2",
-          "scheduler": {
+          "$scheduler": {
             "target":"invoker0",
             "priority":0
           }
@@ -222,6 +224,7 @@ public final class Activation implements ISchedulable, ITraceable {
     public static final String K_SCHEDULER = "$scheduler";
     public static final String K_SCHEDULER_TARGET = "target";
     public static final String K_SCHEDULER_PRIORITY = "priority";
+    public static final String K_SCHEDULER_OVERLOAD = "overload";
     public static final String K_SCHEDULER_LIMITS = "limits";
     public static final String K_SCHEDULER_LIMITS_CONCURRENCY = "concurrency";
     public static final String K_SCHEDULER_LIMITS_MEMORY = "memory";
@@ -244,10 +247,12 @@ public final class Activation implements ISchedulable, ITraceable {
     private final String targetInvoker;
     // using Integer priority, there is not an upper bound to max priority
     private final Integer priority;
+    // indicate invoker overloading
+    private final Boolean overload;
     // limits for current activation
-    private final Integer concurrencyLimit;
-    private final Integer memoryLimit;
-    private final Integer timeLimit;
+    private final Long concurrencyLimit;
+    private final Long memoryLimit;
+    private final Long timeLimit;
     private final Long userMemory;
 
     @SuppressWarnings("unchecked")
@@ -272,9 +277,10 @@ public final class Activation implements ISchedulable, ITraceable {
 
         String targetInvoker = null;
         Integer priority = null;
-        Integer concurrencyLimit = null;
-        Integer memoryLimit = null;
-        Integer timeLimit = null;
+        Boolean overload = null;
+        Long concurrencyLimit = null;
+        Long memoryLimit = null;
+        Long timeLimit = null;
         Long userMemory = null;
         // unpack content
         if (this.content != null) {
@@ -283,18 +289,20 @@ public final class Activation implements ISchedulable, ITraceable {
             Map<String, Object> scheduler = (Map<String, Object>) this.content.get(K_SCHEDULER);
             if (scheduler != null) {
                 targetInvoker = (String) scheduler.get(K_SCHEDULER_TARGET);
-                priority = (Integer) scheduler.get(K_SCHEDULER_PRIORITY);
+                priority = ((Number) scheduler.get(K_SCHEDULER_PRIORITY)).intValue();
+                overload = (Boolean) scheduler.get(K_SCHEDULER_OVERLOAD);
                 Map<String, Object> limits = (Map<String, Object>) scheduler.get(K_SCHEDULER_LIMITS);
                 if (limits != null) {
-                    concurrencyLimit = (Integer) limits.get(K_SCHEDULER_LIMITS_CONCURRENCY);
-                    memoryLimit = (Integer) limits.get(K_SCHEDULER_LIMITS_MEMORY);
-                    timeLimit = (Integer) limits.get(K_SCHEDULER_LIMITS_TIME);
-                    userMemory = (Long) limits.get(K_SCHEDULER_LIMITS_USER_MEMORY);
+                    concurrencyLimit = ((Number) limits.get(K_SCHEDULER_LIMITS_CONCURRENCY)).longValue();
+                    memoryLimit = ((Number) limits.get(K_SCHEDULER_LIMITS_MEMORY)).longValue();
+                    timeLimit = ((Number) limits.get(K_SCHEDULER_LIMITS_TIME)).longValue();
+                    userMemory = ((Number) limits.get(K_SCHEDULER_LIMITS_USER_MEMORY)).longValue();
                 }
             }
         }
         this.targetInvoker = targetInvoker;
         this.priority = priority;
+        this.overload = overload;
         this.concurrencyLimit = concurrencyLimit;
         this.memoryLimit = memoryLimit;
         this.timeLimit = timeLimit;
@@ -388,23 +396,31 @@ public final class Activation implements ISchedulable, ITraceable {
     }
 
     @JsonIgnore
-    public Integer getConcurrencyLimit() {
+    @Override
+    public @Nullable Boolean getOverload() {
+        return overload;
+    }
+
+    @JsonIgnore
+    public Long getConcurrencyLimit() {
         return concurrencyLimit;
     }
 
     @JsonIgnore
-    public Integer getMemoryLimit() {
+    public Long getMemoryLimit() {
         return memoryLimit;
     }
 
     @JsonIgnore
-    public Integer getTimeLimit() {
+    public Long getTimeLimit() {
         return timeLimit;
     }
 
     @JsonIgnore
     public Long getUserMemory() {
-        return userMemory;
+        // OPTIMIZE: create utils for manage byte unit like java.util.concurrent.TimeUnit
+        //   conversion should be done from caller and not here
+        return userMemory / (1024 * 1024);
     }
 
     @Override
@@ -423,6 +439,7 @@ public final class Activation implements ISchedulable, ITraceable {
                 ", user=" + user +
                 ", targetInvoker='" + targetInvoker + '\'' +
                 ", priority=" + priority +
+                ", overload=" + overload +
                 ", concurrencyLimit=" + concurrencyLimit +
                 ", memoryLimit=" + memoryLimit +
                 ", timeLimit=" + timeLimit +

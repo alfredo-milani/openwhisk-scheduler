@@ -1,9 +1,9 @@
-package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.deserializer.TransIdDeserializer;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.serializer.TransIdSerializer;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.deserializer.TransIdDeserializer;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.serializer.TransIdSerializer;
 
 import java.util.List;
 

@@ -65,7 +65,7 @@ metrics:
 # controller's load balancer will send activation to 'to_dispatch' topic instead of 'invokerN'
 controller:
   imageName: "whisk/controller"
-  imageTag: "0.0.11"
+  imageTag: "0.0.12"
 
 # Priority queue scheduler
 scheduler:
@@ -76,12 +76,14 @@ scheduler:
   replicaCount: 1
   restartPolicy: "Always"
   host: null
-  # policy: pass_through
-  policy: priority_queue_fifo
-  pollIntervalMs: "1000"
-  fetchMinBytes: "5242880"
-  fetchMaxWaitMs: "1500"
-  maxPartitionFetchBytes: "5242880"
+  policy: pass_through
+  # policy: priority_queue_fifo
+  tracing: false
+  buffering: true
+  pollIntervalMs: "50"
+  fetchMinBytes: "1"
+  fetchMaxWaitMs: "500"
+  maxPartitionFetchBytes: "0"
   port: 8080
   persistence:
     size: 128Mi

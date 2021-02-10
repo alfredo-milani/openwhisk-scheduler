@@ -183,11 +183,11 @@ parse_ow_input() {
 
             _info "Installing openwhisk application using Helm."
             # helm install owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
-            #     -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_pq.yaml"
+            #     -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics_off.yaml.yaml"
 
-            _info "Metrics not enables."
+            _info "Metrics not enabled."
             helm install owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
-                -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_pq_no_metrics.yaml"
+                -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics_off.yaml"
             ;;
 
         uninstall )
@@ -198,7 +198,7 @@ parse_ow_input() {
         upgrade )
             _info "Upgrading only controller pods."
             helm upgrade owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
-                -n openwhisk -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_pq_no_metrics.yaml"
+                -n openwhisk -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics_off.yaml"
             ;;
 
         wa )

@@ -1,12 +1,12 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.IObserver;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Config;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config.Config;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
@@ -37,15 +37,16 @@ import static java.lang.System.exit;
  *      (questo non è vero per alcuni tipi di Scheduler che potrebbero necessitare di una modifica nei Consumer
  *       per adattarsi a tale cambiamento)
  */
-public class SchedulerFacade {
+public class SchedulerComponent {
 
     private static final Logger LOG = LogManager.getRootLogger();
 
-    public static final String SOURCE_TOPIC = "scheduler";
+    public static final String SCHEDULER_TOPIC = "scheduler";
+    public static final String COMPLETION_TOPIC = "completed";
 
     private final Config config;
 
-    public SchedulerFacade(@Nonnull Config config) {
+    public SchedulerComponent(@Nonnull Config config) {
         checkNotNull(config, "Configuration can not be null.");
         this.config = config;
     }
@@ -83,9 +84,13 @@ public class SchedulerFacade {
 
         // create global app executors
         AppExecutors executors = new AppExecutors(
-                Executors.newFixedThreadPool(2),
+                Executors.newFixedThreadPool(3),
                 null
         );
+
+        // entities
+        List<Callable<String>> dataSourceConsumers = new ArrayList<>();
+        List<Closeable> closeables = new ArrayList<>();
 
         // see@ https://stackoverflow.com/questions/51753883/increase-the-number-of-messages-read-by-a-kafka-consumer-in-a-single-poll
         // see@ https://stackoverflow.com/questions/61552431/kafka-consumer-poll-multiple-records-fetch
@@ -96,7 +101,7 @@ public class SchedulerFacade {
             put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
             put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 1_000);
             // end session after 30 s
-            put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30_000);
+            put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 15_000);
             // wait for 5 MiB of data
             put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, config.getKafkaFetchMinBytes());
             // if min bytes has not reached limit, wait for 2000 ms
@@ -107,8 +112,8 @@ public class SchedulerFacade {
             put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         }};
 
-        final ActivationKafkaConsumer activationKafkaConsumer = new ActivationKafkaConsumer(
-                List.of(SOURCE_TOPIC), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
+        final ActivationKafkaConsumer activationsKafkaConsumer = new ActivationKafkaConsumer(
+                List.of(SCHEDULER_TOPIC), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
         );
 
         // kafka producer
@@ -124,37 +129,38 @@ public class SchedulerFacade {
             put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
             put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         }};
-        final BaseKafkaProducer kafkaProducer = new BaseKafkaProducer(kafkaProducerProperties, null);
+        final BaseKafkaProducer activationsKafkaProducer = new BaseKafkaProducer(kafkaProducerProperties, null);
 
         // define scheduler
-        IPolicy policy = PolicyFactory.createPolicy(Policy.from(config.getSchedulerPolicy()));
+        final IPolicy policy = PolicyFactory.createPolicy(Policy.from(config.getSchedulerPolicy()));
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
-        Scheduler scheduler = new BaseScheduler(policy, kafkaProducer);
+        Scheduler scheduler = new BaseScheduler(policy, activationsKafkaProducer);
         LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
         if (config.getSchedulerTracer()) {
             scheduler = new TracerScheduler(scheduler);
-            LOG.trace("Adding Scheduler {}.", scheduler.getClass().getSimpleName());
+            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
         }
         if (config.getSchedulerBuffered()) {
             scheduler = new BufferedScheduler(scheduler);
-            ((BufferedScheduler) scheduler).setThreshold(config.getSchedulerBufferedThreshold());
-            LOG.trace("Adding Scheduler {}.", scheduler.getClass().getSimpleName());
+            LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
+            // OPTIMIZE: for now, completion topic kafka consumers are hardcoded and provides trace
+            //   functionality for 2 invokers (completed0, completed1).
+            //   In future implementation the completion consumers should be dynamically created
+            final CompletionKafkaConsumer completionKafkaConsumer0 = new CompletionKafkaConsumer(
+                    List.of(COMPLETION_TOPIC + 0), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
+            );
+            final CompletionKafkaConsumer completionKafkaConsumer1 = new CompletionKafkaConsumer(
+                    List.of(COMPLETION_TOPIC + 1), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
+            );
+            completionKafkaConsumer0.register(List.of(scheduler));
+            completionKafkaConsumer1.register(List.of(scheduler));
+            dataSourceConsumers.addAll(List.of(completionKafkaConsumer0, completionKafkaConsumer1));
+            closeables.addAll(List.of(completionKafkaConsumer0, completionKafkaConsumer1));
         }
 
-        List<IObserver> activationObservers = new ArrayList<>();
-        activationObservers.add(scheduler);
-
-        activationKafkaConsumer.register(activationObservers);
-
-        // data source consumer list
-        List<Callable<String>> dataSourceConsumers = new ArrayList<>() {{
-            add(activationKafkaConsumer);
-        }};
-
-        List<Closeable> closeables = new ArrayList<>() {{
-           add(activationKafkaConsumer);
-           add(kafkaProducer);
-        }};
+        activationsKafkaConsumer.register(List.of(scheduler));
+        dataSourceConsumers.add(activationsKafkaConsumer);
+        closeables.addAll(List.of(activationsKafkaConsumer, activationsKafkaProducer));
 
         // register hook to release resources
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

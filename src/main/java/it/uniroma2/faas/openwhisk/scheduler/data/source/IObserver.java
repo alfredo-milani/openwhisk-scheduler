@@ -1,6 +1,6 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.IConsumable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -19,8 +19,8 @@ public interface IObserver {
     void unregister(@Nonnull List<ISubject> subjects);
 
 //    @Deprecated(since = "0.1.0")
-//    <T> void newEvent(@Nonnull String stream, @Nonnull final Collection<T> data);
-//    <T> void newEvent(@Nonnull ISubject.IStream stream, @Nonnull final Collection<T> data);
-    <T> void newEvent(@Nonnull UUID stream, @Nonnull final Collection<T> data);
+//    void newEvent(@Nonnull String stream, @Nonnull final Collection<?> data);
+//    void newEvent(@Nonnull ISubject.IStream stream, @Nonnull final Collection<?> data);
+    void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data);
 
 }

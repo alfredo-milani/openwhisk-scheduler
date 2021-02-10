@@ -2,8 +2,8 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.Activation;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import org.apache.logging.log4j.LogManager;
@@ -54,7 +54,7 @@ public class BaseScheduler extends Scheduler {
     }
 
     @Override
-    public <T> void newEvent(@Nonnull UUID stream, @Nonnull final Collection<T> data) {
+    public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
@@ -68,24 +68,26 @@ public class BaseScheduler extends Scheduler {
             return;
         }
 
-        LOG.trace("Processing new event from stream {}.", stream);
+        final long schedulablesCount = data.stream()
+                .filter(ISchedulable.class::isInstance)
+                .count();
+        LOG.trace("Schedulables objects: {}, over {} received on stream {}.",
+                schedulablesCount, data.size(), stream.toString());
+        if (schedulablesCount <= 0) {
+            LOG.warn("No objects to schedule.");
+            return;
+        }
+
         // IObserver and ISubject interface are decoupled from IConsumer, so <T> type could contains
         //   non schedulables objects
         final Collection<ISchedulable> schedulables = data.stream()
                 .filter(ISchedulable.class::isInstance)
                 .map(ISchedulable.class::cast)
-                .collect(Collectors.toCollection(() -> new ArrayDeque<>(data.size())));
-        final Collection<T> nonSchedulable = data.stream()
-                .filter(e -> !schedulables.contains(e))
-                .collect(Collectors.toUnmodifiableList());
-        if (nonSchedulable.size() > 0) {
-            LOG.warn("Non schedulables objects ({}) found in stream {}.", nonSchedulable.size(), stream.toString());
-        }
-        LOG.trace("Processing {} schedulables objects (over {} received).", schedulables.size(), data.size());
+                .collect(Collectors.toCollection(ArrayDeque::new));
         send(policy.apply(schedulables));
     }
 
-    private void send(@Nonnull final Queue<ISchedulable> schedulables) {
+    private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Schedulables to send can not be null.");
 
         ISchedulable schedulable = schedulables.poll();

@@ -1,6 +1,6 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -8,7 +8,7 @@ import java.util.Queue;
 
 public interface IPolicy {
 
-    @Nonnull <T extends ISchedulable> Queue<T> apply(@Nonnull final Collection<T> schedulables);
+    @Nonnull Queue<? extends ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables);
 
     @Nonnull Policy getPolicy();
 

@@ -2,8 +2,8 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import org.apache.logging.log4j.LogManager;
@@ -14,8 +14,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.FAILURE_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.SUCCESS_STREAM;
 
 public class BaseSchedulerMock extends Scheduler {
 
@@ -50,8 +48,7 @@ public class BaseSchedulerMock extends Scheduler {
     }
 
     @Override
-    public <T> void newEvent(@Nonnull UUID stream,
-                             @Nonnull final Collection<T> data) {
+    public void newEvent(@Nonnull UUID stream, @Nonnull final Collection<?> data) {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
@@ -60,33 +57,31 @@ public class BaseSchedulerMock extends Scheduler {
         // see@ https://stackoverflow.com/questions/3741765/ordering-threads-to-run-in-the-order-they-were-created-started
         // see@ https://stackoverflow.com/questions/12286628/which-thread-will-be-the-first-to-enter-the-critical-section
 
-        if (stream.equals(SUCCESS_STREAM)) {
-            LOG.debug("Stream {} received.", stream.toString());
-            LOG.debug("Success, data size: {}.", data.size());
-        }
-        if (stream.equals(FAILURE_STREAM)) {
-            LOG.debug("Stream {} received.", stream.toString());
-            LOG.debug("Failure, data size: {}.", data.size());
+        if (!stream.equals(ActivationKafkaConsumerMock.ACTIVATION_STREAM)) {
+            LOG.warn("Unable to manage data type from stream {}.", stream.toString());
+            return;
         }
 
-        LOG.trace("Received activation from stream {}.", stream);
+        final long schedulablesCount = data.stream()
+                .filter(ISchedulable.class::isInstance)
+                .count();
+        LOG.trace("Schedulables objects: {}, over {} received on stream {}.",
+                schedulablesCount, data.size(), stream.toString());
+        if (schedulablesCount <= 0) {
+            LOG.warn("No objects to schedule.");
+            return;
+        }
+
         // IObserver and ISubject interface are decoupled from IConsumer, so <T> type could contains
         //   non schedulables objects
-        Collection<ISchedulable> schedulables = data.stream()
+        final Collection<ISchedulable> schedulables = data.stream()
                 .filter(ISchedulable.class::isInstance)
                 .map(ISchedulable.class::cast)
-                .collect(Collectors.toUnmodifiableList());
-        Collection<T> nonSchedulable = data.stream()
-                .filter(e -> !schedulables.contains(e))
-                .collect(Collectors.toUnmodifiableList());
-        if (nonSchedulable.size() > 0) {
-            LOG.warn("Non schedulables objects ({}) found in stream {}.", nonSchedulable.size(), stream.toString());
-        }
-        LOG.trace("Sending {} schedulables objects.", schedulables.size());
+                .collect(Collectors.toCollection(ArrayDeque::new));
         send(policy.apply(schedulables));
     }
 
-    private void send(@Nonnull Queue<ISchedulable> schedulables) {
+    private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Schedulables to send can not be null.");
 
         ISchedulable schedulable = schedulables.poll();

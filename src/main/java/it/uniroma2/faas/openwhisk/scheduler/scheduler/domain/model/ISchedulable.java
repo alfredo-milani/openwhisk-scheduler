@@ -1,4 +1,4 @@
-package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 
@@ -30,6 +30,7 @@ public interface ISchedulable extends IConsumable {
     /**
      * Retrieve {@link ISchedulable} target invoker.
      * All {@link ISchedulable} objects are processed to be sent to an invoker, for execution.
+     * Nota that, if target invoker is null, the activation should be sent to all invokers.
      *
      * @return string representing target destination.
      */

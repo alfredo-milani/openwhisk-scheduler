@@ -30,7 +30,7 @@ public abstract class AdvancedScheduler extends Scheduler {
     }
 
     @Override
-    public <T> void newEvent(@Nonnull UUID stream, @Nonnull final Collection<T> data) {
+    public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         scheduler.newEvent(stream, data);
     }
 

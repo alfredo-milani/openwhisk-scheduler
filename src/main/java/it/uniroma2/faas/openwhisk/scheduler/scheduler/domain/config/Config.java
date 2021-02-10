@@ -1,4 +1,4 @@
-package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config;
 
 import com.google.common.base.Preconditions;
 import it.uniroma2.faas.openwhisk.scheduler.util.ProjectSpecs;
@@ -9,7 +9,6 @@ import java.io.*;
 import java.util.HashMap;
 import java.util.Properties;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class Config extends HashMap<String, Object> {
@@ -31,16 +30,16 @@ public class Config extends HashMap<String, Object> {
     public static final String V_DEFAULT_KAFKA_BOOTSTRAP_SERVERS = "localhost:9092";
     // Kafka consumer poll interval
     public static final String K_KAFKA_POLL_INTERVAL_MS = "scheduler.kafka.poll.interval";
-    public static final int V_DEFAULT_KAFKA_POLL_INTERVAL_MS = 500;
+    public static final int V_DEFAULT_KAFKA_POLL_INTERVAL_MS = 50;
     // Kafka fetch min bytes
     public static final String K_KAFKA_FETCH_MIN_BYTES = "scheduler.kafka.fetch_min_bytes";
-    public static final int V_DEFAULT_KAFKA_FETCH_MIN_BYTES = 5 * 1024 * 1024;
+    public static final int V_DEFAULT_KAFKA_FETCH_MIN_BYTES = 1;
     // Kafka fetch max wait ms
     public static final String K_KAFKA_FETCH_MAX_WAIT_MS = "scheduler.kafka.fetch_max_wait_ms";
-    public static final int V_DEFAULT_KAFKA_FETCH_MAX_WAIT_MS = 2000;
+    public static final int V_DEFAULT_KAFKA_FETCH_MAX_WAIT_MS = 500;
     // Kafka max partition fetch bytes
     public static final String K_KAFKA_MAX_PARTITION_FETCH_BYTES = "scheduler.kafka.max_partition_fetch_bytes";
-    public static final int V_DEFAULT_KAFKA_MAX_PARTITION_FETCH_BYTES = 5 * 1024 * 1024;
+    public static final int V_DEFAULT_KAFKA_MAX_PARTITION_FETCH_BYTES = 0;
 
     // Scheduler policy
     public static final String K_SCHEDULER_POLICY = "scheduler.policy";
@@ -48,8 +47,6 @@ public class Config extends HashMap<String, Object> {
     // Scheduler buffering functionality
     public static final String K_SCHEDULER_BUFFERED = "scheduler.buffered";
     public static final boolean V_DEFAULT_SCHEDULER_BUFFERED = false;
-    public static final String K_SCHEDULER_BUFFERED_THRESHOLD = "scheduler.buffered.threshold";
-    public static final float V_DEFAULT_SCHEDULER_BUFFERED_THRESHOLD = 70.0f;
     // Scheduler tracing functionality
     public static final String K_SCHEDULER_TRACER = "scheduler.tracer";
     public static final boolean V_DEFAULT_SCHEDULER_TRACER = false;
@@ -72,7 +69,6 @@ public class Config extends HashMap<String, Object> {
 
         put(K_SCHEDULER_POLICY, V_DEFAULT_SCHEDULER_POLICY);
         put(K_SCHEDULER_BUFFERED, V_DEFAULT_SCHEDULER_BUFFERED);
-        put(K_SCHEDULER_BUFFERED_THRESHOLD, V_DEFAULT_SCHEDULER_BUFFERED_THRESHOLD);
         put(K_SCHEDULER_TRACER, V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -125,7 +121,6 @@ public class Config extends HashMap<String, Object> {
 
         putString(K_SCHEDULER_POLICY, properties.get(K_SCHEDULER_POLICY), null);
         putBoolean(K_SCHEDULER_BUFFERED, properties.get(K_SCHEDULER_BUFFERED), V_DEFAULT_SCHEDULER_BUFFERED);
-        putFloat(K_SCHEDULER_BUFFERED_THRESHOLD, properties.get(K_SCHEDULER_BUFFERED_THRESHOLD), V_DEFAULT_SCHEDULER_BUFFERED_THRESHOLD);
         putBoolean(K_SCHEDULER_TRACER, properties.get(K_SCHEDULER_TRACER), V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -298,16 +293,6 @@ public class Config extends HashMap<String, Object> {
 
     public void setSchedulerBuffered(boolean schedulerBuffered) {
         put(K_SCHEDULER_BUFFERED, schedulerBuffered);
-    }
-
-    public float getSchedulerBufferedThreshold() {
-        return (float) get(K_SCHEDULER_BUFFERED_THRESHOLD);
-    }
-
-    public void setSchedulerBufferedThreshold(float schedulerBufferedThreshold) {
-        checkArgument(schedulerBufferedThreshold >= 0 && schedulerBufferedThreshold <= 100,
-                "Buffering ratio must be >= 0 and <= 100.");
-        put(K_SCHEDULER_BUFFERED_THRESHOLD, schedulerBufferedThreshold);
     }
 
     public boolean getSchedulerTracer() {

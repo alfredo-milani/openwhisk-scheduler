@@ -1,6 +1,6 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayDeque;
@@ -14,7 +14,7 @@ class PassThroughPolicy implements IPolicy {
     public static final Policy POLICY = Policy.PASS_THROUGH;
 
     @Override
-    public @Nonnull <T extends ISchedulable> Queue<T> apply(@Nonnull final Collection<T> schedulables) {
+    public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Input collection of schedulables can not be null.");
         return new ArrayDeque<>(schedulables);
     }

@@ -1,4 +1,4 @@
-package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IConsumer;
 

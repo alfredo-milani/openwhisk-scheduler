@@ -31,3 +31,10 @@ Questo file contiene un summary delle modifiche effettuate alla code base di Apa
     - Modifiche: 
         - ShardingContainerPoolBalancer#publish
         - CommonLoadBalancer#sendActivationToInvoker
+
+- 0.0.12
+    - Descrizione: il controller invia informazioni aggiuntive circa l'utilizzo di risorse: "content":{"$scheduler":{"limits":{"concurrency":10,"memory":256,"timeout":60000, "userMemory":2147483648},"priority":12,"target":"invoker0","overload":true}}.
+    E' stato aggiunto il campo "overload" per indicare se la corrente activation è stata schedulata anche se il sistema è in overloading.
+    - Modifiche: 
+        - ShardingContainerPoolBalancer#publish
+        - CommonLoadBalancer#sendActivationToInvoker

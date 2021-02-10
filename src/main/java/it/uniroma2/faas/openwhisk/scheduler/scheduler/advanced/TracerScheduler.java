@@ -1,8 +1,8 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.Activation;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.ITraceable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.ITraceable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -10,7 +10,6 @@ import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -43,89 +42,93 @@ public class TracerScheduler extends AdvancedScheduler {
      * associated with them.
      *
      * In this first implementation, actions are associated with a temporal mark and are removed from the map
-     * once are considered too old, based on {@link #timeLimitMs}.
+     * once are considered too old, based on {@link #timeLimitMs}. Note that using timeouts can led to consider
+     * activation with high priority to be processed as activation with default priority.
      *
      * In newer implementation could be considered to use Kafka topic "completedN" to remove completed compositions.
      * @param stream stream indicator
      * @param data consumable object to be processed
      */
     @Override
-    public <T> void newEvent(@Nonnull UUID stream, @Nonnull final Collection<T> data) {
+    public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
-        if (!stream.equals(ACTIVATION_STREAM)) {
-            LOG.warn("Unable to manage data type from stream {}.", stream.toString());
-            return;
+        // using wildcard, without filtering ISchedulable objects, to maintain all
+        //   objects types in the list
+        // will be traced only ITraceable objects
+        final List<?> dataList = new ArrayList<>(data);
+        if (stream.equals(ACTIVATION_STREAM)) {
+            // counting traceable objects
+            long traceablesCount = dataList.stream()
+                    .filter(ITraceable.class::isInstance)
+                    .count();
+            LOG.trace("Traceables objects: {}, over {} received on stream {}.",
+                    traceablesCount, data.size(), stream.toString());
+            if (traceablesCount > 0) {
+                traceCompositions(dataList);
+            }
         }
+        removeOldEntries(timeLimitMs);
 
-        final List<ITraceable> traceables = data.stream()
-                .filter(ITraceable.class::isInstance)
-                .map(ITraceable.class::cast)
-                .collect(Collectors.toList());
-        final Collection<T> nonTraceables = data.stream()
-                .filter(e -> !traceables.contains(e))
-                .collect(Collectors.toUnmodifiableList());
-        if (nonTraceables.size() > 0) {
-            LOG.warn("Non traceable objects ({}) found in stream {} (over {} received).",
-                    nonTraceables.size(), stream.toString(), data.size());
-        }
-
-        traceCompositions(traceables);
-        updateCompositionsMap();
-        LOG.trace("Processing {} traceables objects (over {} received).", traceables.size(), data.size());
-
-        super.newEvent(stream, traceables);
+        super.newEvent(stream, dataList);
     }
 
     /**
      * In place substitution of {@link ITraceable} objects with missing priority level.
+     * Only {@link ITraceable} objects will be considered. Non-{@link ITraceable} objects will not
+     * be modified.
      *
-     * @param traceables list to check.
+     * @param data schedulables objects.
      */
-    private void traceCompositions(@Nonnull List<ITraceable> traceables) {
-        checkNotNull(traceables, "Traceable list can not be null.");
+    private void traceCompositions(@Nonnull final List<?> data) {
+        checkNotNull(data, "Data can not be null.");
 
-        ListIterator<ITraceable> traceableListIterator = traceables.listIterator();
-        while (traceableListIterator.hasNext()) {
-            ITraceable traceable = traceableListIterator.next();
-            // if cause is not null current activation belongs to a composition
-            if (traceable.getCause() != null) {
-                int priority = traceable.getPriority() == null
-                        ? 0
-                        : traceable.getPriority();
-                Map.Entry<Integer, Long> entry = compositionsMap.putIfAbsent(
-                        traceable.getActivationId(),
-                        new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
-                );
-                // if there is already an entry for PrimaryActivationID, use priority associated to process activation
-                if (entry != null) {
-                    // if traced priority differs, create new traceable with correct priority
-                    if (entry.getKey() != priority) {
-                        traceableListIterator.set(traceable.with(entry.getKey()));
-                        LOG.trace("Adding priority level {} associated with cause {} for activation with id {}",
-                                entry.getKey(), traceable.getCause(), traceable.getActivationId());
+        // traceable objects are not filtered before to maintain an order list
+        ListIterator<?> listIterator = data.listIterator();
+        while (listIterator.hasNext()) {
+            Object datum = listIterator.next();
+            if (datum instanceof ITraceable) {
+                ITraceable traceable = (ITraceable) datum;
+                // if cause is not null current activation belongs to a composition
+                if (traceable.getCause() != null) {
+                    int priority = traceable.getPriority() == null
+                            ? 0
+                            : traceable.getPriority();
+                    Map.Entry<Integer, Long> entry = compositionsMap.putIfAbsent(
+                            traceable.getActivationId(),
+                            new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
+                    );
+                    // if there is already an entry for PrimaryActivationID, use priority associated to process activation
+                    if (entry != null) {
+                        // if traced priority differs, create new traceable with correct priority
+                        if (entry.getKey() != priority) {
+                            LOG.trace("Adding priority level {} associated with cause {} for activation with id {}",
+                                    entry.getKey(), traceable.getCause(), traceable.getActivationId());
+                            listIterator.set(traceable.with(entry.getKey()));
+                        }
+                    } else {
+                        LOG.trace("Created new entry for cause id {} with priority {} - generated by activation with id {}.",
+                                traceable.getCause(), traceable.getPriority(), traceable.getActivationId());
                     }
-                } else {
-                    LOG.trace("Created new entry for cause id {} with priority {} - generated by activation with id {}.",
-                            traceable.getCause(), traceable.getPriority(), traceable.getActivationId());
                 }
+                // otherwise probably the activation received does not belongs to a composition
             }
-            // otherwise probably the activation received does not belongs to a composition
         }
     }
 
     /**
      * Remove entries older than {@link #timeLimitMs}.
      */
-    private void updateCompositionsMap() {
+    private void removeOldEntries(long delta) {
+        LOG.trace("Updating compositions map.");
         long now = Instant.now().toEpochMilli();
         int sizeBeforeUpdate = compositionsMap.size();
-        compositionsMap.values().removeIf(entry -> now - entry.getValue() > timeLimitMs);
+        compositionsMap.values().removeIf(entry -> now - entry.getValue() > delta);
         int sizeAfterUpdate = compositionsMap.size();
         if (sizeBeforeUpdate != sizeAfterUpdate) {
             LOG.trace("Removed {} elements from compositions map (retention {} ms).",
-                    sizeBeforeUpdate - sizeAfterUpdate, timeLimitMs);
+                    sizeBeforeUpdate - sizeAfterUpdate, delta);
         }
     }
 

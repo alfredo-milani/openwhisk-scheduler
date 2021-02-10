@@ -2,9 +2,9 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.*;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ConsumableKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -13,13 +13,14 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class ActivationKafkaConsumerMock<T extends IConsumable> extends AbstractKafkaConsumer<T> {
+public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activation> {
 
     private final static Logger LOG = LogManager.getLogger(ConsumableKafkaConsumer.class.getCanonicalName());
 
     private final Random random = new Random();
     private final String recordOnlyTarget = "{\"action\":{\"name\":\"hello_py\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"%s\",\"blocking\":true,\"content\":{\"kTest\":\"vTest\",\"$scheduler\":{\"target\":\"invoker0\",\"priority\":%d,\"limits\":{\"concurrency\":8,\"memory\":128,\"timeout\":60000,\"userMemory\":2147483648}}},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"1-ff07dcb3291545090f86e9fc1a01b5bf\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"4K6K9Uoz09O5ut42VEiFI9zrOAiJX8oq\",1611192819095],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}";
     private final String recordWithCause = "{\"action\":{\"name\":\"fn1\",\"path\":\"guest\",\"version\":\"0.0.2\"},\"activationId\":\"%s\",\"blocking\":true,\"cause\":\"%s\",\"content\":{\"sleep_time\":15,\"user\":\"Kira\",\"$scheduler\":{\"target\":\"invoker0\",\"priority\":%d,\"limits\":{\"concurrency\":8,\"memory\":128,\"timeout\":60000,\"userMemory\":2147483648}}},\"initArgs\":[],\"revision\":\"2-2bd48aaaf6e1721bca963e680eee313e\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"bxytKe9Qk3EYVEYQnpHs02NDFo5eKAd3\",1609870677855,[\"2rkHZR02ErZB6kol4tl5LN4oxiHB5VH8\",1609870676410,[\"iRFErOK5Hflz8qduy49vBKWWMFTG44IW\",1609870676273]]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}";
+    private final String activationBufferedScheduler = "{\"action\":{\"name\":\"hello_py\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"%s\",\"blocking\":true,\"content\":{\"kTest\":\"vTest\",\"$scheduler\":{\"target\":\"%s\",\"priority\":%d,\"limits\":{\"concurrency\":2,\"memory\":256,\"timeout\":60000,\"userMemory\":2147483648}}},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"1-ff07dcb3291545090f86e9fc1a01b5bf\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"4K6K9Uoz09O5ut42VEiFI9zrOAiJX8oq\",1611192819095],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}";
 
     protected final ObjectMapper objectMapper;
     protected final int pollingIntervalMs;
@@ -47,8 +48,6 @@ public class ActivationKafkaConsumerMock<T extends IConsumable> extends Abstract
 //        private FAILURE_STREAM() {}
 //    }
     // to stream type UUID
-    public static final UUID SUCCESS_STREAM = UUID.randomUUID();
-    public static final UUID FAILURE_STREAM = UUID.randomUUID();
     public static final UUID ACTIVATION_STREAM = UUID.randomUUID();
 
     /*@Override
@@ -84,33 +83,25 @@ public class ActivationKafkaConsumerMock<T extends IConsumable> extends Abstract
      * @return
      */
     @Override
-    public @Nullable Collection<T> consume() {
+    public @Nullable Collection<Activation> consume() {
         try {
             TimeUnit.SECONDS.sleep(2);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        final Collection<T> data = new ArrayDeque<>(10);
+        final Collection<Activation> data = new ArrayDeque<>(10);
         for (int i = 0; i < 10; ++i) {
             try {
-                T activation = (T) objectMapper.readValue(String.format(recordOnlyTarget,
+                Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),
+                        "invoker" + random.ints(0, 2).findFirst().getAsInt(),
                         random.ints(0, 6).findFirst().getAsInt()),
                         Activation.class);
                 data.add(activation);
-                T activationWithCause = (T) objectMapper.readValue(String.format(recordWithCause,
-                        UUID.randomUUID(),
-                        UUID.randomUUID(),
-                        random.ints(0, 6).findFirst().getAsInt()),
-                        Activation.class);
-                data.add(activationWithCause);
             } catch (JsonProcessingException e) {
                 LOG.warn("Exception parsing Activation from record: ");
+                e.printStackTrace();
             }
-        }
-        for (int i = 0; i < 5; ++i) {
-            data.add((T) new Health(new Instance(0, Instance.Type.CONTROLLER, "evbrg", "222222 B")));
-            data.add((T) new Event(null, "frev", "rgbr", "vrgbr", "brynth", 45464L, "htunt"));
         }
         LOG.trace("Sending {} consumable to observers.", data.size());
         return data;

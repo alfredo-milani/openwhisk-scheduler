@@ -15,15 +15,19 @@
         </Root>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="ConsoleAppender"/>
         </Logger>
 
-        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ConsumableKafkaConsumer" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer" additivity="false">
+            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+        </Logger>
+
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer" additivity="false">
+            <AppenderRef level="OFF" ref="ConsoleAppender"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="ConsoleAppender"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BaseScheduler" additivity="false">

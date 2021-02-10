@@ -1,6 +1,6 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.IConsumable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 
 import javax.annotation.Nonnull;
 import java.io.Closeable;

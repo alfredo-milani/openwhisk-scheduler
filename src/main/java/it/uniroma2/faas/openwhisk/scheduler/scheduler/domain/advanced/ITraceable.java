@@ -1,4 +1,6 @@
-package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced;
+
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nullable;
 

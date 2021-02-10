@@ -1,6 +1,6 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -17,14 +17,14 @@ class PriorityQueueFIFOPolicy implements IPolicy {
     public static final int DEFAULT_PRIORITY = 0;
 
     @Override
-    public @Nonnull <T extends ISchedulable> Queue<T> apply(@Nonnull final Collection<T> schedulables) {
+    public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Consumables can not be null.");
 
         // higher priority to activations with higher priority level (priority level represented as integer)
         // TreeMap default order is ascending, so here is used Comparator provided from Collections to get reverse order
-        final SortedMap<Integer, Queue<T>> prioritiesQueuesMap = new TreeMap<>(Collections.reverseOrder());
+        final SortedMap<Integer, Queue<ISchedulable>> prioritiesQueuesMap = new TreeMap<>(Collections.reverseOrder());
         // creates new entry if there is not yet a queue associated with new priority level received
-        for (T schedulable : schedulables) {
+        for (ISchedulable schedulable : schedulables) {
             Integer priority = schedulable.getPriority();
             if (priority == null) {
                 LOG.warn("Priority for schedulable with id {} is null; using default value (0).",
@@ -39,10 +39,10 @@ class PriorityQueueFIFOPolicy implements IPolicy {
         }
 
         int elements = prioritiesQueuesMap.values().stream().mapToInt(Collection::size).sum();
-        final Queue<T> priorityQueue = new ArrayDeque<>(elements);
+        final Queue<ISchedulable> priorityQueue = new ArrayDeque<>(elements);
         // TreeMap#values, using Collections#reverseOrder provides queues in descending order, so
         //   queue associated with higher priority level are processed first
-        for (Queue<T> pq : prioritiesQueuesMap.values()) {
+        for (Queue<ISchedulable> pq : prioritiesQueuesMap.values()) {
             priorityQueue.addAll(pq);
         }
         return priorityQueue;

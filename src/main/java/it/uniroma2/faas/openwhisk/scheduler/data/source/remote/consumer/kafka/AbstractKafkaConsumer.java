@@ -3,7 +3,7 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IObserver;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.model.IConsumable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.logging.log4j.LogManager;
@@ -35,7 +35,6 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
     protected Instant lastRecordTimestamp = Instant.now();
     protected Instant newRecordTimestamp = Instant.from(lastRecordTimestamp);
 
-    protected final List<String> streams = new ArrayList<>();
     protected final List<String> topics;
     protected final Properties kafkaProperties;
     protected final KafkaConsumer<String, String> consumer;
@@ -105,8 +104,8 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
 
             streamToData.keySet().stream()
                     .filter(Objects::nonNull)
-                    .forEach(stream ->
-                            o.newEvent(stream, Collections.unmodifiableCollection(streamToData.get(stream))));
+                    .forEach(stream -> o.newEvent(stream,
+                            Collections.unmodifiableCollection(streamToData.get(stream))));
         }
     }
 

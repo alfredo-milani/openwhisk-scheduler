@@ -1,7 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler;
 
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.SchedulerFacade;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Config;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.SchedulerComponent;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config.Config;
 import it.uniroma2.faas.openwhisk.scheduler.util.VersionProvider;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -49,13 +49,13 @@ public class Application implements Runnable {
                 description = "Configure scheduler policy. Supported: [PASS_THROUGH, PRIORITY_QUEUE_FIFO].")
         private String schedulerPolicy;
 
-        @CommandLine.Option(names = {"-s", "--buffered-scheduler"}, arity = "1",
-                description = "Enable buffered scheduler functionality, by specifying ratio (0-100) threshold after it will buffer activations.")
-        private Float schedulerBuffered;
+        @CommandLine.Option(names = {"-s", "--buffered-scheduler"},
+                description = "Enable buffered scheduler functionality.")
+        private boolean schedulerBuffered;
 
-        @CommandLine.Option(names = {"-t", "--tracer-scheduler"}, arity = "1",
+        @CommandLine.Option(names = {"-t", "--tracer-scheduler"},
                 description = "If enabled, scheduler will trace actions belonging to composition in order to provide correct priority value.")
-        private Boolean schedulerTracer;
+        private boolean schedulerTracer;
     }
 
     private static class Exclusive {
@@ -93,11 +93,8 @@ public class Application implements Runnable {
             config.setKafkaMaxPartitionFetchBytes(flags.kafkaMaxPartitionFetchBytes);
         if (flags.schedulerPolicy != null)
             config.setSchedulerPolicy(flags.schedulerPolicy);
-        if (flags.schedulerBuffered != null)
-            config.setSchedulerBufferedThreshold(flags.schedulerBuffered);
-            config.setSchedulerBuffered(true);
-        if (flags.schedulerTracer != null)
-            config.setSchedulerTracer(flags.schedulerTracer);
+        config.setSchedulerTracer(flags.schedulerTracer);
+        config.setSchedulerBuffered(flags.schedulerBuffered);
     }
 
     private @Nonnull Config createConfig() {
@@ -134,7 +131,7 @@ public class Application implements Runnable {
     @Override
     public void run() {
         // start scheduler
-        new SchedulerFacade(createConfig()).start();
+        new SchedulerComponent(createConfig()).start();
     }
 
     public static void main(String[] args) throws Exception {
