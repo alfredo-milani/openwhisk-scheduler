@@ -5,11 +5,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 import javax.annotation.Nonnull;
+import java.util.Objects;
 
 public class Instance {
 
     /*
-    {"instance":0,"instanceType":"invoker","uniqueName":"owdev-invoker-0","userMemory":"2147483648 B"}
+     * {
+     *   "instance": 0,
+     *   "instanceType": "invoker",
+     *   "uniqueName": "owdev-invoker-0",
+     *   "userMemory": "2147483648 B"
+     * }
      */
 
     private final int instance;
@@ -62,6 +68,19 @@ public class Instance {
 
     public String getUserMemory() {
         return userMemory;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Instance instance = (Instance) o;
+        return Objects.equals(uniqueName, instance.uniqueName) && Objects.equals(userMemory, instance.userMemory);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(uniqueName, userMemory);
     }
 
     @Override

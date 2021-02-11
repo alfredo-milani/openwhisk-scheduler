@@ -1,14 +1,13 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source.domain;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.*;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
-import it.uniroma2.faas.openwhisk.scheduler.util.AppExecutors;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -33,6 +32,7 @@ public class SchedulerComponentTest {
     private final static Logger LOG = LogManager.getRootLogger();
 
     public static final String SCHEDULER_TOPIC = "scheduler";
+    public static final String HEALTH_TOPIC = "health";
     public static final String COMPLETION_TOPIC = "completed";
 
     public static void start() {
@@ -40,7 +40,7 @@ public class SchedulerComponentTest {
         Configurator.setRootLevel(Level.TRACE);
 
         // create global app executors
-        AppExecutors executors = new AppExecutors(
+        SchedulerExecutors executors = new SchedulerExecutors(
                 Executors.newFixedThreadPool(3),
                 null
         );
@@ -93,8 +93,9 @@ public class SchedulerComponentTest {
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
         LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
-        boolean tracerSchedulerOption = true;
-        boolean bufferedSchedulerOption = true;
+        boolean tracerSchedulerOption = false;
+        boolean bufferedSchedulerOption = false;
+        boolean healthScheckerSchedulerOption = true;
         if (tracerSchedulerOption) {
             scheduler = new TracerSchedulerMock(scheduler);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
@@ -115,6 +116,23 @@ public class SchedulerComponentTest {
             completionKafkaConsumer1.register(List.of(scheduler));
             dataSourceConsumers.addAll(List.of(completionKafkaConsumer0, completionKafkaConsumer1));
             closeables.addAll(List.of(completionKafkaConsumer0, completionKafkaConsumer1));
+        }
+        if (healthScheckerSchedulerOption) {
+            scheduler = new HealthCheckerSchedulerMock(scheduler);
+            LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
+            final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
+                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
+            );
+            healthKafkaConsumer.register(List.of(scheduler));
+//            dataSourceConsumers.add(healthKafkaConsumer);
+            closeables.add(healthKafkaConsumer);
+
+            final CompletionKafkaConsumerMock completionKafkaConsumer = new CompletionKafkaConsumerMock(
+                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
+            );
+            completionKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(completionKafkaConsumer);
+            closeables.add(completionKafkaConsumer);
         }
 
         activationsKafkaConsumer.register(List.of(scheduler));

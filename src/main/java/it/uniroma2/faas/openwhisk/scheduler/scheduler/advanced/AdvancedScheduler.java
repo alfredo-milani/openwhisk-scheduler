@@ -34,4 +34,9 @@ public abstract class AdvancedScheduler extends Scheduler {
         scheduler.newEvent(stream, data);
     }
 
+    @Override
+    public void shutdown() {
+        scheduler.shutdown();
+    }
+
 }

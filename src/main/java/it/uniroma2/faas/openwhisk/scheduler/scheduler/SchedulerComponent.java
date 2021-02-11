@@ -1,7 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
@@ -10,7 +10,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config.Config;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
-import it.uniroma2.faas.openwhisk.scheduler.util.AppExecutors;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -25,9 +25,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.System.exit;
@@ -42,6 +42,7 @@ public class SchedulerComponent {
     private static final Logger LOG = LogManager.getRootLogger();
 
     public static final String SCHEDULER_TOPIC = "scheduler";
+    public static final String HEALTH_TOPIC = "health";
     public static final String COMPLETION_TOPIC = "completed";
 
     private final Config config;
@@ -83,10 +84,7 @@ public class SchedulerComponent {
         LOG.debug(config.toString());
 
         // create global app executors
-        AppExecutors executors = new AppExecutors(
-                Executors.newFixedThreadPool(3),
-                null
-        );
+        SchedulerExecutors executors = new SchedulerExecutors(0, 1);
 
         // entities
         List<Callable<String>> dataSourceConsumers = new ArrayList<>();
@@ -111,7 +109,6 @@ public class SchedulerComponent {
             put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         }};
-
         final ActivationKafkaConsumer activationsKafkaConsumer = new ActivationKafkaConsumer(
                 List.of(SCHEDULER_TOPIC), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
         );
@@ -143,19 +140,12 @@ public class SchedulerComponent {
         if (config.getSchedulerBuffered()) {
             scheduler = new BufferedScheduler(scheduler);
             LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
-            // OPTIMIZE: for now, completion topic kafka consumers are hardcoded and provides trace
-            //   functionality for 2 invokers (completed0, completed1).
-            //   In future implementation the completion consumers should be dynamically created
-            final CompletionKafkaConsumer completionKafkaConsumer0 = new CompletionKafkaConsumer(
-                    List.of(COMPLETION_TOPIC + 0), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
+            final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
+                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
             );
-            final CompletionKafkaConsumer completionKafkaConsumer1 = new CompletionKafkaConsumer(
-                    List.of(COMPLETION_TOPIC + 1), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
-            );
-            completionKafkaConsumer0.register(List.of(scheduler));
-            completionKafkaConsumer1.register(List.of(scheduler));
-            dataSourceConsumers.addAll(List.of(completionKafkaConsumer0, completionKafkaConsumer1));
-            closeables.addAll(List.of(completionKafkaConsumer0, completionKafkaConsumer1));
+            healthKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(healthKafkaConsumer);
+            closeables.add(healthKafkaConsumer);
         }
 
         activationsKafkaConsumer.register(List.of(scheduler));
@@ -178,7 +168,7 @@ public class SchedulerComponent {
         try {
             // see@ https://stackoverflow.com/questions/20495414/thread-join-equivalent-in-executor
             // invokeAll() blocks until all tasks are completed
-            executors.networkIO().invokeAll(dataSourceConsumers);
+            Objects.requireNonNull(executors.computation()).invokeAll(dataSourceConsumers);
         } catch (InterruptedException e) {
             LOG.fatal("Scheduler interrupted: {}.", e.getMessage());
             exit(1);

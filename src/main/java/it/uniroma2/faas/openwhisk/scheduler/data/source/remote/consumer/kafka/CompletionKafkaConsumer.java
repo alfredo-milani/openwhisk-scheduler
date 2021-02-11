@@ -13,6 +13,8 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.*;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 public class CompletionKafkaConsumer extends AbstractKafkaConsumer<Completion> {
 
     private final static Logger LOG = LogManager.getLogger(CompletionKafkaConsumer.class.getCanonicalName());
@@ -22,12 +24,13 @@ public class CompletionKafkaConsumer extends AbstractKafkaConsumer<Completion> {
     protected final ObjectMapper objectMapper;
     protected final int pollingIntervalMs;
 
-    public CompletionKafkaConsumer(@Nonnull List<String> topics, Properties kafkaProperties) {
+    public CompletionKafkaConsumer(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties) {
         this(topics, kafkaProperties, DEFAULT_POLLING_INTERVAL_MS);
     }
 
-    public CompletionKafkaConsumer(@Nonnull List<String> topics, Properties kafkaProperties, int pollingIntervalMs) {
+    public CompletionKafkaConsumer(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties, int pollingIntervalMs) {
         super(topics, kafkaProperties);
+        checkArgument(pollingIntervalMs > 0, "Polling interval must be > 0.");
         this.pollingIntervalMs = pollingIntervalMs;
         this.objectMapper = new ObjectMapper();
     }

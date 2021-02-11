@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker.DEFAULT_INVOKER_USER_MEMORY;
 
 public class BufferedSchedulerMock extends AdvancedScheduler {
 
@@ -60,8 +59,9 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                     Invoker invoker = invokersMap.get(bufferizable.getTargetInvoker());
                     if (invoker == null) {
                         final long newInvokerUserMemory = bufferizable.getUserMemory() == null
-                                ? DEFAULT_INVOKER_USER_MEMORY
-                                : bufferizable.getUserMemory();
+                                ? 2048L
+                                // OPTIMIZE: create utils for manage byte unit like java.util.concurrent.TimeUnit
+                                : bufferizable.getUserMemory() / (1024 * 1024);
                         final Invoker newInvoker = new Invoker(bufferizable.getTargetInvoker(), newInvokerUserMemory);
                         invokersMap.put(bufferizable.getTargetInvoker(), newInvoker);
                         invoker = newInvoker;

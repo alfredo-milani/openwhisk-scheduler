@@ -19,4 +19,8 @@ public abstract class Scheduler implements IObserver {
     @Override
     public abstract void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data);
 
+    public void shutdown() {
+
+    }
+
 }

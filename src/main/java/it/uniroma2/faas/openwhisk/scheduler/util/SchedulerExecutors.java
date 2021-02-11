@@ -1,10 +1,11 @@
 package it.uniroma2.faas.openwhisk.scheduler.util;
 
+import javax.annotation.Nullable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public class AppExecutors {
+public class SchedulerExecutors {
 
     private static final int NETWORK_IO_THREAD_COUNT = 5;
     private static final int COMPUTATION_THREAD_COUNT = 5;
@@ -12,25 +13,30 @@ public class AppExecutors {
     private final ExecutorService networkIO;
     private final ExecutorService computation;
 
-    // TODO: vedi se utilizzare ExecutorService per poter utilizzare Future
-    //          see@ https://www.baeldung.com/java-executor-service-tutorial
-    public AppExecutors() {
-        this(
-                Executors.newFixedThreadPool(NETWORK_IO_THREAD_COUNT),
-                Executors.newFixedThreadPool(COMPUTATION_THREAD_COUNT)
-        );
+    // TODO: if Future are necessary see@ https://www.baeldung.com/java-executor-service-tutorial
+    public SchedulerExecutors() {
+        this(NETWORK_IO_THREAD_COUNT, COMPUTATION_THREAD_COUNT);
     }
 
-    public AppExecutors(ExecutorService networkIO, ExecutorService computation) {
+    public SchedulerExecutors(int networkIOThreadsCount, int computationThreadsCount) {
+        this.networkIO = networkIOThreadsCount > 0
+                ? Executors.newFixedThreadPool(networkIOThreadsCount)
+                : null;
+        this.computation = computationThreadsCount > 0
+                ? Executors.newFixedThreadPool(computationThreadsCount)
+                : null;
+    }
+
+    public SchedulerExecutors(@Nullable ExecutorService networkIO, @Nullable ExecutorService computation) {
         this.networkIO = networkIO;
         this.computation = computation;
     }
 
-    public ExecutorService networkIO() {
+    public @Nullable ExecutorService networkIO() {
         return networkIO;
     }
 
-    public ExecutorService computation() {
+    public @Nullable ExecutorService computation() {
         return computation;
     }
 

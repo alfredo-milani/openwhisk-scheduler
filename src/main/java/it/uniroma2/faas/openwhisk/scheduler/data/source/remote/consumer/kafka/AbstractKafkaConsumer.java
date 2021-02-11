@@ -12,8 +12,6 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -27,7 +25,7 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
 
     private final static Logger LOG = LogManager.getLogger(AbstractKafkaConsumer.class.getCanonicalName());
 
-    public final static int THREAD_COUNT = 1;
+    public final static int THREAD_COUNT = 5;
 
     protected final Object mutex = new Object();
     // OPTIMIZE: sostituisci con Set() per non avere duplicati in modo automatico
@@ -38,18 +36,12 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
     protected final List<String> topics;
     protected final Properties kafkaProperties;
     protected final KafkaConsumer<String, String> consumer;
-    protected final ExecutorService executors;
 
     public AbstractKafkaConsumer(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties) {
-        this(topics, kafkaProperties, Executors.newFixedThreadPool(THREAD_COUNT));
-    }
-
-    public AbstractKafkaConsumer(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties,
-                                 @Nonnull ExecutorService executors) {
         checkNotNull(topics, "Topic lists can not be null.");
+        checkNotNull(kafkaProperties, "Kafka properties can not be null.");
         this.topics = topics;
         this.kafkaProperties = kafkaProperties;
-        this.executors = executors;
         this.consumer = new KafkaConsumer<>(this.kafkaProperties);
     }
 

@@ -423,9 +423,7 @@ public final class Activation implements ITraceable, IBufferizable {
 
     @JsonIgnore
     public Long getUserMemory() {
-        // OPTIMIZE: create utils for manage byte unit like java.util.concurrent.TimeUnit
-        //   conversion should be done from caller and not here
-        return userMemory / (1024 * 1024);
+        return userMemory;
     }
 
     @Override

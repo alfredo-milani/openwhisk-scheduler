@@ -1,7 +1,10 @@
-package it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka;
+package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -12,10 +15,11 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-public class HealthKafkaConsumer extends AbstractKafkaConsumer<Health> {
+public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
 
     private final static Logger LOG = LogManager.getLogger(HealthKafkaConsumer.class.getCanonicalName());
 
@@ -24,11 +28,11 @@ public class HealthKafkaConsumer extends AbstractKafkaConsumer<Health> {
     protected final ObjectMapper objectMapper;
     protected final int pollingIntervalMs;
 
-    public HealthKafkaConsumer(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties) {
+    public HealthKafkaConsumerMock(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties) {
         this(topics, kafkaProperties, DEFAULT_POLLING_INTERVAL_MS);
     }
 
-    public HealthKafkaConsumer(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties, int pollingIntervalMs) {
+    public HealthKafkaConsumerMock(@Nonnull List<String> topics, @Nonnull Properties kafkaProperties, int pollingIntervalMs) {
         super(topics, kafkaProperties);
         checkArgument(pollingIntervalMs > 0, "Polling interval must be > 0.");
         this.pollingIntervalMs = pollingIntervalMs;
@@ -44,25 +48,33 @@ public class HealthKafkaConsumer extends AbstractKafkaConsumer<Health> {
         }};
     }
 
+    private final Random random = new Random();
+    private final String recordHealth = "{\"name\":{\"instance\":%d,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-%d\",\"userMemory\":\"%d B\"}}";
+
     /**
      * It is assumed that only one thread per instance calls this method.
      * @return
      */
     @Override
     public @Nullable Collection<Health> consume() {
-        // see@ https://stackoverflow.com/questions/58697750/fetch-max-wait-ms-vs-parameter-to-poll-method
-        //  or in docs for poll() details
-        ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(pollingIntervalMs));
-        if (records.count() == 0) return null;
-
-        LOG.trace("Read {} records from topics {}.", records.count(), topics);
-        final Collection<Health> data = new ArrayDeque<>(records.count());
-        for (ConsumerRecord<String, String> r : records) {
-            try {
-                data.add(objectMapper.readValue(r.value(), Health.class));
-            } catch (JsonProcessingException e) {
-                LOG.warn("Exception parsing Activation from record: {}.", r.value());
-            }
+        try {
+            TimeUnit.SECONDS.sleep(2);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        final Collection<Health> data = new ArrayDeque<>(10);
+        try {
+            int invoker = random.ints(0, 2).findFirst().getAsInt();
+            Health activation = objectMapper.readValue(String.format(
+                    recordHealth,
+                    invoker,
+                    invoker,
+                    1024L * 1024L * 1024L * 2L
+            ), Health.class);
+            data.add(activation);
+        } catch (JsonProcessingException e) {
+            LOG.warn("Exception parsing Activation from record: ");
+            e.printStackTrace();
         }
         LOG.trace("Sending {} consumable to observers.", data.size());
         return data;

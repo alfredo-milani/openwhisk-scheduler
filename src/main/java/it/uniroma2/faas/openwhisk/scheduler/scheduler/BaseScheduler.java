@@ -26,7 +26,8 @@ public class BaseScheduler extends Scheduler {
     private final static Logger LOG = LogManager.getLogger(BaseScheduler.class.getCanonicalName());
 
     private final List<ISubject> subjects = new ArrayList<>();
-    private final IPolicy policy;
+    // subclass can use scheduler's policy
+    protected final IPolicy policy;
     private final IProducer producer;
 
     public BaseScheduler(@Nonnull IPolicy policy, @Nonnull IProducer producer) {
@@ -103,6 +104,11 @@ public class BaseScheduler extends Scheduler {
             }
             schedulable = schedulables.poll();
         }
+    }
+
+    @Override
+    public void shutdown() {
+        LOG.trace("{} shutdown.", this.getClass().getSimpleName());
     }
 
 }

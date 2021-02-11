@@ -4,11 +4,20 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.Objects;
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public final class Health implements IConsumable {
 
     /*
-    {"name":{"instance":0,"instanceType":"invoker","uniqueName":"owdev-invoker-0","userMemory":"2147483648 B"}}
+     * {
+     *   "name": {
+     *     "instance": 0,
+     *     "instanceType": "invoker",
+     *     "uniqueName": "owdev-invoker-0",
+     *     "userMemory": "2147483648 B"
+     *   }
+     * }
      */
 
     private final Instance instance;
@@ -18,8 +27,21 @@ public final class Health implements IConsumable {
         this.instance = instance;
     }
 
-    public Instance getComponentInstance() {
+    public Instance getInstance() {
         return instance;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Health health = (Health) o;
+        return Objects.equals(instance, health.instance);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(instance);
     }
 
     @Override
