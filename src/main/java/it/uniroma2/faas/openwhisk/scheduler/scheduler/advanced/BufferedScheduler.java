@@ -6,7 +6,6 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.IBufferiza
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Instance;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -170,6 +169,10 @@ public class BufferedScheduler extends AdvancedScheduler {
                         // if there are no buffered activations for current invoker, check next
                         if (buffer == null || buffer.size() == 0) continue;
 
+                        // create new queue objects which contains the same elements from buffered queue
+                        //   but in the order specified by current policy
+                        final Queue<IBufferizable> bufferFromPolicy = applyPolicy(buffer);
+
                         // for all completions processed by current invoker, submit all buffered activations
                         //   for which invoker has sufficient resources
                         Long completionsCount = entry.getValue();
@@ -178,13 +181,16 @@ public class BufferedScheduler extends AdvancedScheduler {
                             LOG.warn("Map contains invokerTarget key but no value for completionsCount.");
                             continue;
                         }
-                        final Iterator<IBufferizable> bufferIterator = buffer.iterator();
-                        while (bufferIterator.hasNext() && completionsCount > 0) {
-                            final IBufferizable activation = bufferIterator.next();
-                            // checks if at least one of total buffered activations can be submitted
-                            if (!invoker.tryAcquireMemoryAndConcurrency(activation)) continue;
+                        for (final IBufferizable activation : bufferFromPolicy) {
+                            // checks if at least one of buffered activations can be submitted
+                            // note that it is not sufficient break iteration if can not be acquired
+                            //   memory and concurrency on current activation because it is possible that
+                            //   there is another activation in the buffered queue with requirements
+                            //   to be scheduled on current invoker
+                            if (completionsCount <= 0 || !invoker.tryAcquireMemoryAndConcurrency(activation))
+                                continue;
                             invocationQueue.add(activation);
-                            bufferIterator.remove();
+                            buffer.remove(activation);
                             --completionsCount;
                         }
                     }
@@ -257,6 +263,18 @@ public class BufferedScheduler extends AdvancedScheduler {
         }
         executors.shutdown();
         super.shutdown();
+    }
+
+    /**
+     * Create new {@link IBufferizable} queue with the same elements from input queue but in the order
+     * specified by selected policy.
+     *
+     * @param queue input queue.
+     * @return new queue with elements in custom order.
+     */
+    private @Nonnull Queue<IBufferizable> applyPolicy(@Nonnull Queue<IBufferizable> queue) {
+        checkNotNull(queue, "Queue can not be null.");
+        return (Queue<IBufferizable>) getPolicy().apply(queue);
     }
 
     private void healthCheck(long healthCheck, long offlineCheck) {
