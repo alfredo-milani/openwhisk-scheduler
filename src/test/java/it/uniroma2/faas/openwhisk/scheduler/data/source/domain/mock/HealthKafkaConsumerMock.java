@@ -54,7 +54,7 @@ public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
     @Override
     public @Nullable Collection<Health> consume() {
         try {
-            TimeUnit.SECONDS.sleep(2);
+            TimeUnit.SECONDS.sleep(40);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

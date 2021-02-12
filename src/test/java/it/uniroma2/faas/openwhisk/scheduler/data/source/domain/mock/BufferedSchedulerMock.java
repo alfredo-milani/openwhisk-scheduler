@@ -99,7 +99,7 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                     if (invoker == null || !invoker.isHealthy()) {
                         invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
                         invokerBufferMap.get(invokerTarget).add(bufferizable);
-                        LOG.trace("Invoker {} not yet registered in the system or it is not healthy. Buffering activation with id {}.",
+                        LOG.trace("Invoker {} not yet registered or not healthy. Buffering activation with id {}.",
                                 invokerTarget, bufferizable.getActivationId());
                         continue;
                     }
@@ -263,6 +263,7 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                 if (now - invoker.getUpdate() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
+                    invoker.removeAllContainers();
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
                     // when invoker is marked as offline, release resources associated with it
                     invokerBufferMap.remove(invoker.getInvokerName());

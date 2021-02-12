@@ -6,6 +6,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -242,13 +243,39 @@ public class Invoker {
         this.update = update;
     }
 
+    /**
+     * Remove all registered activations and all {@link ContainerAction}s.
+     * All memory became available.
+     */
+    public void removeAllContainers() {
+        activationContainerMap.clear();
+        actionContainerMap.clear();
+        memory = userMemory;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Invoker invoker = (Invoker) o;
+        return userMemory == invoker.userMemory && Objects.equals(invokerName, invoker.invokerName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(invokerName, userMemory);
+    }
+
     @Override
     public String toString() {
         return "Invoker{" +
                 "invokerName='" + invokerName + '\'' +
                 ", userMemory=" + userMemory +
                 ", actionContainerMap=" + actionContainerMap +
+                ", activationContainerMap=" + activationContainerMap +
                 ", memory=" + memory +
+                ", state=" + state +
+                ", update=" + update +
                 '}';
     }
 
