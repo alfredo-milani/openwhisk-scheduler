@@ -1,6 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
@@ -126,12 +125,13 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
             LOG.trace("Processing {} completion objects (over {} received).",
                     completions.size(), data.size());
             if (completions.size() > 0) {
-                //
+                // contains activations to be sent
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-                //
+                // <invokerTarget, completionCount>
+                // mapping between invoker and its processed completions
                 final Map<String, Long> invokerCompletionCountMap = new HashMap<>();
                 synchronized (mutex) {
-                    // first free resources for all received completions
+                    // first, free resources for all received completions
                     for (final Completion completion : completions) {
                         final String invokerTarget = getInvokerTargetFrom(completion.getInstance());
                         final String activationId = completion.getActivationId() == null
@@ -145,41 +145,57 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                         if (invoker == null) continue;
                         // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
-
                         // if invoker target is not healthy, so no new activations can be scheduled on it
                         if (!invoker.isHealthy()) continue;
-                        //
-                        Long count = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1L);
-                        //
-                        if (count != null) invokerCompletionCountMap.put(invokerTarget, ++count);
+
+                        // if invoker target is healthy, insert max completionsCount of activations
+                        //   that could be scheduled on it
+                        Long completionsCount = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1L);
+                        if (completionsCount != null) invokerCompletionCountMap.put(invokerTarget, ++completionsCount);
                     }
 
-                    //
-                    if (invokerCompletionCountMap.size() > 0) {
-                        for (final Map.Entry<String, Long> entry : invokerCompletionCountMap.entrySet()) {
-                            final String invokerTarget = entry.getKey();
-                            final Invoker invoker = invokersMap.get(invokerTarget);
+                    // second, for all invokers that have produced at least one completion,
+                    //   check if there is a buffered activation that can be scheduled on it
+                    //   (so, if it has necessary resources)
+                    for (final Map.Entry<String, Long> entry : invokerCompletionCountMap.entrySet()) {
+                        final String invokerTarget = entry.getKey();
+                        final Invoker invoker = invokersMap.get(invokerTarget);
 
-                            if (invoker == null || !invoker.isHealthy()) continue;
+                        // double check on invoker
+                        if (invoker == null || !invoker.isHealthy()) continue;
 
-                            final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
-                            if (buffer == null || buffer.peek() == null) continue;
+                        final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
+                        // if there are no buffered activations for current invoker, check next
+                        if (buffer == null || buffer.size() == 0) continue;
 
-                            Long completionCount = entry.getValue();
-                            if (completionCount == null) {
-                                LOG.warn("Map contains invokerTarget key but no value for completionCount.");
+                        // create new queue objects which contains the same elements from buffered queue
+                        //   but in the order specified by current policy
+                        final Queue<IBufferizable> bufferFromPolicy = applyPolicy(buffer);
+
+                        // for all completions processed by current invoker, submit all buffered activations
+                        //   for which invoker has sufficient resources
+                        Long completionsCount = entry.getValue();
+                        // double check
+                        if (completionsCount == null) {
+                            LOG.warn("Map contains invokerTarget key but no value for completionsCount.");
+                            continue;
+                        }
+                        for (final IBufferizable activation : bufferFromPolicy) {
+                            // checks if at least one of buffered activations can be submitted
+                            // note that it is not sufficient break iteration if can not be acquired
+                            //   memory and concurrency on current activation because it is possible that
+                            //   there is another activation in the buffered queue with requirements
+                            //   to be scheduled on current invoker
+                            if (completionsCount <= 0 || !invoker.tryAcquireMemoryAndConcurrency(activation))
                                 continue;
-                            }
-                            while (completionCount > 0) {
-                                if (!invoker.tryAcquireMemoryAndConcurrency(buffer.peek())) break;
-                                invocationQueue.add(buffer.poll());
-                                --completionCount;
-                            }
+                            invocationQueue.add(activation);
+                            buffer.remove(activation);
+                            --completionsCount;
                         }
                     }
                 }
                 if (invocationQueue.size() > 0)
-                    super.newEvent(ActivationKafkaConsumer.ACTIVATION_STREAM, invocationQueue);
+                    super.newEvent(ACTIVATION_STREAM, invocationQueue);
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
@@ -207,15 +223,17 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                             // create new completion Kafka consumer
                             // assign its value to null to create it later (in health checking phase)
                             invokerCompletionConsumerMap.putIfAbsent(invokerTarget, null);
+                            LOG.trace("New invoker registered in the system: {}.", invokerTarget);
                         }
 
                         // if invoker was already healthy, update its timestamp
                         if (invoker.isHealthy()) {
-                            invoker.setUpdate(Instant.now().toEpochMilli());
+                            invoker.setTimestamp(Instant.now().toEpochMilli());
                             // invoker has become healthy
                         } else {
-                            // upon receiving hearthbeat from invoker, mark that invoker as healthy
+                            // upon receiving hearth-beat from invoker, mark that invoker as healthy
                             invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
+                            LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
 
                             final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
                             // if there are buffered activations, send them all to activation stream
@@ -223,7 +241,7 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                             if (buffer != null && buffer.size() > 0) {
                                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>(buffer);
                                 buffer.clear();
-                                newEvent(ActivationKafkaConsumer.ACTIVATION_STREAM, invocationQueue);
+                                newEvent(ACTIVATION_STREAM, invocationQueue);
                             }
                         }
                     }
@@ -246,19 +264,31 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
         super.shutdown();
     }
 
+    /**
+     * Create new {@link IBufferizable} queue with the same elements from input queue but in the order
+     * specified by selected policy.
+     *
+     * @param queue input queue.
+     * @return new queue with elements in custom order.
+     */
+    private @Nonnull Queue<IBufferizable> applyPolicy(@Nonnull Queue<IBufferizable> queue) {
+        checkNotNull(queue, "Queue can not be null.");
+        return (Queue<IBufferizable>) getPolicy().apply(queue);
+    }
+
     private void healthCheck(long healthCheck, long offlineCheck) {
         long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getUpdate() > healthCheck) {
+                if (now - invoker.getTimestamp() > healthCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(UNHEALTHY);
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
                 }
 
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getUpdate() > offlineCheck) {
+                if (now - invoker.getTimestamp() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
                     invoker.removeAllContainers();

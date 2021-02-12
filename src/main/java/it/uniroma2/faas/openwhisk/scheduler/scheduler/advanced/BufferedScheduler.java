@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer.COMPLETION_STREAM;
@@ -75,6 +76,7 @@ public class BufferedScheduler extends AdvancedScheduler {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
+        healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
         if (stream.equals(ACTIVATION_STREAM)) {
             final Collection<IBufferizable> bufferizables = data.stream()
                     .filter(IBufferizable.class::isInstance)
@@ -84,38 +86,41 @@ public class BufferedScheduler extends AdvancedScheduler {
                 LOG.warn("Non bufferizable objects discarded: {}.", data.size() - bufferizables.size());
             }
 
-            final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-            synchronized (mutex) {
-                for (final IBufferizable bufferizable : bufferizables) {
-                    final String invokerTarget = bufferizable.getTargetInvoker();
-                    final Invoker invoker = invokersMap.get(bufferizable.getTargetInvoker());
+            if (bufferizables.size() > 0) {
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
+                synchronized (mutex) {
+                    for (final IBufferizable bufferizable : bufferizables) {
+                        final String invokerTarget = bufferizable.getTargetInvoker();
+                        final Invoker invoker = invokersMap.get(bufferizable.getTargetInvoker());
 
-                    // if there is not yet target invoker in the system or target invoker
-                    //   is not healthy, buffer activation
-                    if (invoker == null || !invoker.isHealthy()) {
-                        invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
-                        invokerBufferMap.get(invokerTarget).add(bufferizable);
-                        LOG.trace("Invoker {} not yet registered or not healthy. Buffering activation with id {}.",
-                                invokerTarget, bufferizable.getActivationId());
-                        continue;
-                    }
+                        // if there is not yet target invoker in the system or target invoker
+                        //   is not healthy, buffer activation
+                        if (invoker == null || !invoker.isHealthy()) {
+                            invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
+                            invokerBufferMap.get(invokerTarget).add(bufferizable);
+                            LOG.trace("Invoker {} not yet registered or not healthy. Buffering activation with id {}.",
+                                    invokerTarget, bufferizable.getActivationId());
+                            continue;
+                        }
 
-                    // try acquire resource on target invoker
-                    if (invoker.tryAcquireMemoryAndConcurrency(bufferizable)) {
-                        invocationQueue.add(bufferizable);
-                        LOG.trace("Scheduled activation {} - remaining memory on {}: {}.",
-                                bufferizable.getActivationId(), invoker.getInvokerName(), invoker.getMemory());
-                    // target invoker overloaded, so buffer activation
-                    } else {
-                        invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
-                        invokerBufferMap.get(invokerTarget).add(bufferizable);
-                        LOG.trace("Detected system overload (controller flag: {}), buffering activation with id {} for target {}.",
-                                bufferizable.getOverload(), bufferizable.getActivationId(), bufferizable.getTargetInvoker());
+                        // try acquire resource on target invoker
+                        if (invoker.tryAcquireMemoryAndConcurrency(bufferizable)) {
+                            invocationQueue.add(bufferizable);
+                            LOG.trace("Scheduled activation {} - remaining memory on {}: {}.",
+                                    bufferizable.getActivationId(), invoker.getInvokerName(), invoker.getMemory());
+                            // target invoker overloaded, so buffer activation
+                        } else {
+                            invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
+                            invokerBufferMap.get(invokerTarget).add(bufferizable);
+                            LOG.trace("Detected system overload (controller flag: {}), buffering activation with id {} for target {}.",
+                                    bufferizable.getOverload(), bufferizable.getActivationId(), bufferizable.getTargetInvoker());
+                        }
                     }
                 }
+                // sending activation process outside synchronized block improve concurrency and throughput but
+                //   could TODO
+                if (invocationQueue.size() > 0) super.newEvent(stream, invocationQueue);
             }
-            if (invocationQueue.size() > 0)
-                super.newEvent(stream, invocationQueue);
         } else if (stream.equals(COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
@@ -147,10 +152,10 @@ public class BufferedScheduler extends AdvancedScheduler {
                         // if invoker target is not healthy, so no new activations can be scheduled on it
                         if (!invoker.isHealthy()) continue;
 
-                        // if invoker target is healthy, insert max count of activations
+                        // if invoker target is healthy, insert max completionsCount of activations
                         //   that could be scheduled on it
-                        Long count = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1L);
-                        if (count != null) invokerCompletionCountMap.put(invokerTarget, ++count);
+                        Long completionsCount = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1L);
+                        if (completionsCount != null) invokerCompletionCountMap.put(invokerTarget, ++completionsCount);
                     }
 
                     // second, for all invokers that have produced at least one completion,
@@ -163,8 +168,6 @@ public class BufferedScheduler extends AdvancedScheduler {
                         // double check on invoker
                         if (invoker == null || !invoker.isHealthy()) continue;
 
-                        // OPTIMIZE: could be considered a queue containing activations ordered
-                        //   as dictated by current scheduler's policy
                         final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
                         // if there are no buffered activations for current invoker, check next
                         if (buffer == null || buffer.size() == 0) continue;
@@ -229,7 +232,7 @@ public class BufferedScheduler extends AdvancedScheduler {
 
                         // if invoker was already healthy, update its timestamp
                         if (invoker.isHealthy()) {
-                            invoker.setUpdate(Instant.now().toEpochMilli());
+                            invoker.setTimestamp(Instant.now().toEpochMilli());
                         // invoker has become healthy
                         } else {
                             // upon receiving hearth-beat from invoker, mark that invoker as healthy
@@ -242,7 +245,15 @@ public class BufferedScheduler extends AdvancedScheduler {
                             if (buffer != null && buffer.size() > 0) {
                                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>(buffer);
                                 buffer.clear();
-                                newEvent(ACTIVATION_STREAM, invocationQueue);
+                                // send to activation stream to be processed and re-buffered if necessary
+                                // note that this method call is placed inside synchronized block
+                                //   to prioritize buffered activations over new ones; in this case all
+                                //   activations will be sent inside synchronized block
+                                // to reduce synchronization overhead or to not prioritize buffered activations
+                                //   over new ones, create new invocation queue externally to synchronized block
+                                //   and insert in it all selected activations and call this#newEvent outside
+                                //   synchronized block
+                                this.newEvent(ACTIVATION_STREAM, invocationQueue);
                             }
                         }
                     }
@@ -252,7 +263,7 @@ public class BufferedScheduler extends AdvancedScheduler {
             LOG.trace("Pass through stream {}.", stream.toString());
             super.newEvent(stream, data);
         }
-        healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
+        checkIfCreateCompletionKafkaConsumers();
     }
 
     @Override
@@ -278,18 +289,13 @@ public class BufferedScheduler extends AdvancedScheduler {
     }
 
     private void healthCheck(long healthCheck, long offlineCheck) {
+        checkArgument(healthCheck < offlineCheck,
+                "Offline check time must be > of health check time.");
         long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
-                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getUpdate() > healthCheck) {
-                    // timestamp of the last update will not be updated
-                    invoker.updateState(UNHEALTHY);
-                    LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
-                }
-
-                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getUpdate() > offlineCheck) {
+                // if invoker has not sent hearth-beat in delta, mark it as offline
+                if (now - invoker.getTimestamp() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
                     invoker.removeAllContainers();
@@ -303,30 +309,38 @@ public class BufferedScheduler extends AdvancedScheduler {
                         //   outside synchronized block ?
                         completionKafkaConsumer.close();
                     }
+                    // continue because if invoker is offline is also unhealthy
+                    continue;
                 }
 
-                CompletionKafkaConsumer completionKafkaConsumer =
-                        invokerCompletionConsumerMap.get(invoker.getInvokerName());
-                // if there are completion Kafka consumers marked as null, they must be created
-                if (completionKafkaConsumer == null) {
-                    final String topic = String.format(TEMPLATE_COMPLETION_TOPIC,
-                            getInstanceFromInvokerTarget(invoker.getInvokerName()));
-                    LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
-                    // OPTIMIZE: should Kafka consumer creation be placed
-                    //   outside synchronized block ?
-                    completionKafkaConsumer =  new CompletionKafkaConsumer(
-                            List.of(topic), kafkaConsumerProperties, 100
-                    );
-                    invokerCompletionConsumerMap.put(invoker.getInvokerName(), completionKafkaConsumer);
-                    register(List.of(completionKafkaConsumer));
-                    completionKafkaConsumer.register(List.of(this));
-                    Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
+                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
+                if (now - invoker.getTimestamp() > healthCheck) {
+                    // timestamp of the last update will not be updated
+                    invoker.updateState(UNHEALTHY);
+                    LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
                 }
             }
         }
     }
 
-    private void createNewCompletionConsumerFor(int instance) {
+    private void checkIfCreateCompletionKafkaConsumers() {
+        synchronized (mutex) {
+            for (final String invokerTarget : invokersMap.keySet()) {
+                CompletionKafkaConsumer completionKafkaConsumer =
+                        invokerCompletionConsumerMap.get(invokerTarget);
+                // if there are completion Kafka consumers marked as null, they must be created
+                if (completionKafkaConsumer == null) {
+                    final int invokerInstance = getInstanceFromInvokerTarget(invokerTarget);
+                    // OPTIMIZE: should Kafka consumer creation be placed
+                    //   outside synchronized block ?
+                    invokerCompletionConsumerMap.put(invokerTarget,
+                            createCompletionConsumerFrom(invokerInstance));
+                }
+            }
+        }
+    }
+
+    private @Nonnull CompletionKafkaConsumer createCompletionConsumerFrom(int instance) {
         final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
         LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
         final CompletionKafkaConsumer completionKafkaConsumer = new CompletionKafkaConsumer(
@@ -335,6 +349,7 @@ public class BufferedScheduler extends AdvancedScheduler {
         register(List.of(completionKafkaConsumer));
         completionKafkaConsumer.register(List.of(this));
         Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
+        return completionKafkaConsumer;
     }
 
     public static @Nonnull String getInvokerTargetFrom(@Nonnull Instance instance) {
@@ -342,9 +357,9 @@ public class BufferedScheduler extends AdvancedScheduler {
         return instance.getInstanceType().getName() + instance.getInstance();
     }
 
-    public static long getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
+    public static int getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
         checkNotNull(invokerTarget, "Invoker target can not be null.");
-        return Long.parseLong(invokerTarget.replace("invoker", ""));
+        return Integer.parseInt(invokerTarget.replace("invoker", ""));
     }
 
     /**

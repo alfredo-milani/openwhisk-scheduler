@@ -42,7 +42,7 @@ public class Invoker {
     // invoker state
     private State state = State.NOT_READY;
     // last state update timestamp
-    private long update = 0L;
+    private long timestamp = 0L;
 
     // invoker's state
     public enum State {
@@ -214,14 +214,14 @@ public class Invoker {
     }
 
     public void updateState(@Nonnull State state) {
-        updateState(state, update);
+        updateState(state, timestamp);
     }
 
-    public void updateState(@Nonnull State state, long update) {
+    public void updateState(@Nonnull State state, long timestamp) {
         checkNotNull(state, "State can not be null.");
-        checkArgument(update >= 0 && update >= this.update,
-                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.update);
-        this.update = update;
+        checkArgument(timestamp >= 0 && timestamp >= this.timestamp,
+                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.timestamp);
+        this.timestamp = timestamp;
         this.state = state;
     }
 
@@ -233,14 +233,14 @@ public class Invoker {
         return state == State.HEALTHY;
     }
 
-    public long getUpdate() {
-        return update;
+    public long getTimestamp() {
+        return timestamp;
     }
 
-    public void setUpdate(long update) {
-        checkArgument(update >= 0 && update >= this.update,
-                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.update);
-        this.update = update;
+    public void setTimestamp(long timestamp) {
+        checkArgument(timestamp >= 0 && timestamp >= this.timestamp,
+                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.timestamp);
+        this.timestamp = timestamp;
     }
 
     /**
@@ -275,7 +275,7 @@ public class Invoker {
                 ", activationContainerMap=" + activationContainerMap +
                 ", memory=" + memory +
                 ", state=" + state +
-                ", update=" + update +
+                ", update=" + timestamp +
                 '}';
     }
 
