@@ -3,6 +3,8 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.Objects;
+
 public class Action {
 
     /*
@@ -35,6 +37,19 @@ public class Action {
 
     public String getVersion() {
         return version;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Action action = (Action) o;
+        return Objects.equals(name, action.name) && Objects.equals(path, action.path) && Objects.equals(version, action.version);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, path, version);
     }
 
     @Override

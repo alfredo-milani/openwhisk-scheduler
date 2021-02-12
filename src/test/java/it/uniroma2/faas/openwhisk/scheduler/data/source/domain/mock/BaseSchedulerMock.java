@@ -5,7 +5,6 @@ import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,8 +42,9 @@ public class BaseSchedulerMock extends Scheduler {
         this.subjects.removeAll(subjects);
     }
 
-    public Policy getPolicy() {
-        return policy.getPolicy();
+    @Override
+    public IPolicy getPolicy() {
+        return policy;
     }
 
     @Override

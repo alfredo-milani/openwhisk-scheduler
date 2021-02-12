@@ -40,6 +40,7 @@ public interface IBufferizable extends ISchedulable {
      *
      * @return a long representing total user memory in the target invoker.
      */
+    @Deprecated(since = "0.1.17")
     @Nullable Long getUserMemory();
 
     /**

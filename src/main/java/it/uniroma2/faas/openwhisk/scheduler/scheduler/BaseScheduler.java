@@ -5,7 +5,6 @@ import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -27,7 +26,7 @@ public class BaseScheduler extends Scheduler {
 
     private final List<ISubject> subjects = new ArrayList<>();
     // subclass can use scheduler's policy
-    protected final IPolicy policy;
+    private final IPolicy policy;
     private final IProducer producer;
 
     public BaseScheduler(@Nonnull IPolicy policy, @Nonnull IProducer producer) {
@@ -50,8 +49,9 @@ public class BaseScheduler extends Scheduler {
         this.subjects.removeAll(subjects);
     }
 
-    public Policy getPolicy() {
-        return policy.getPolicy();
+    @Override
+    public IPolicy getPolicy() {
+        return policy;
     }
 
     @Override

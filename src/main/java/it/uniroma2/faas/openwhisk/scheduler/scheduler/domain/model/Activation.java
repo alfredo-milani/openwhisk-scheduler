@@ -12,6 +12,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -424,6 +425,20 @@ public final class Activation implements ITraceable, IBufferizable {
     @JsonIgnore
     public Long getUserMemory() {
         return userMemory;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Activation that = (Activation) o;
+        return Objects.equals(action, that.action) && Objects.equals(activationId, that.activationId) &&
+                Objects.equals(revision, that.revision);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(action, activationId, revision);
     }
 
     @Override

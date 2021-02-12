@@ -38,6 +38,18 @@ public class Invoker {
 
     // available memory
     private long memory;
+    // invoker state
+    private State state = State.NOT_READY;
+    // last state update timestamp
+    private long update = 0L;
+
+    // invoker's state
+    public enum State {
+        NOT_READY,
+        OFFLINE,
+        HEALTHY,
+        UNHEALTHY
+    }
 
     public Invoker(@Nonnull String invokerName, long userMemory) {
         checkNotNull(invokerName, "Invoker name can not be null.");
@@ -82,7 +94,7 @@ public class Invoker {
 
         // if concurrency can not be acquired, try acquire memory
         // if memory can be acquired, acquire also concurrency
-        // using default value for bufferizable which does not have
+        // using default value for bufferizable that does not have
         //   memory limit is safe as long as it will be released in future
         long memory = bufferizable.getMemoryLimit() == null
                 ? DEFAULT_MEMORY_LIMIT_MiB
@@ -103,7 +115,7 @@ public class Invoker {
         if (containerToRemove != null) {
             // remove selected unused action container and increase invoker's available memory
             this.memory += actionContainerMap.remove(containerToRemove).getMemoryLimit();
-            // now try acquire memory and concurrency
+            // now retry acquire memory and concurrency
             return tryAcquireMemoryAndConcurrency(bufferizable);
         }
 
@@ -198,6 +210,36 @@ public class Invoker {
 
     public long getActivationsCount() {
         return activationContainerMap.size();
+    }
+
+    public void updateState(@Nonnull State state) {
+        updateState(state, update);
+    }
+
+    public void updateState(@Nonnull State state, long update) {
+        checkNotNull(state, "State can not be null.");
+        checkArgument(update >= 0 && update >= this.update,
+                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.update);
+        this.update = update;
+        this.state = state;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public boolean isHealthy() {
+        return state == State.HEALTHY;
+    }
+
+    public long getUpdate() {
+        return update;
+    }
+
+    public void setUpdate(long update) {
+        checkArgument(update >= 0 && update >= this.update,
+                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.update);
+        this.update = update;
     }
 
     @Override

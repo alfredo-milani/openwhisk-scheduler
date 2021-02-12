@@ -4,16 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -63,18 +59,20 @@ public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
             e.printStackTrace();
         }
         final Collection<Health> data = new ArrayDeque<>(10);
-        try {
-            int invoker = random.ints(0, 2).findFirst().getAsInt();
-            Health activation = objectMapper.readValue(String.format(
-                    recordHealth,
-                    invoker,
-                    invoker,
-                    1024L * 1024L * 1024L * 2L
-            ), Health.class);
-            data.add(activation);
-        } catch (JsonProcessingException e) {
-            LOG.warn("Exception parsing Activation from record: ");
-            e.printStackTrace();
+        for (int i = 0; i < 10; ++i) {
+            try {
+                int invoker = random.ints(0, 3).findFirst().getAsInt();
+                Health activation = objectMapper.readValue(String.format(
+                        recordHealth,
+                        invoker,
+                        invoker,
+                        1024L * 1024L * 1024L * 2L
+                ), Health.class);
+                data.add(activation);
+            } catch (JsonProcessingException e) {
+                LOG.warn("Exception parsing Activation from record: ");
+                e.printStackTrace();
+            }
         }
         LOG.trace("Sending {} consumable to observers.", data.size());
         return data;

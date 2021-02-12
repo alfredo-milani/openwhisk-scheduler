@@ -84,7 +84,7 @@ public class SchedulerComponent {
         LOG.debug(config.toString());
 
         // create global app executors
-        SchedulerExecutors executors = new SchedulerExecutors(0, 1);
+        SchedulerExecutors executors = new SchedulerExecutors(0, 2);
 
         // entities
         List<Callable<String>> dataSourceConsumers = new ArrayList<>();
@@ -139,7 +139,10 @@ public class SchedulerComponent {
         }
         if (config.getSchedulerBuffered()) {
             scheduler = new BufferedScheduler(scheduler);
+            // set kafka bootstrap servers
+            ((BufferedScheduler) scheduler).setKafkaBootstrapServers(config.getKafkaBootstrapServers());
             LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
+            // register health kafka consumer
             final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
             );

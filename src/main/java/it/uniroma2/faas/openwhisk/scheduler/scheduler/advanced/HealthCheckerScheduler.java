@@ -4,12 +4,10 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
-import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
-import java.sql.Time;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,6 +54,7 @@ public class HealthCheckerScheduler extends AdvancedScheduler {
         checkNotNull(data, "Data can not be null.");
 
         if (stream.equals(HEALTH_STREAM)) {
+            // TODO: manage case when an invoker get updated with more/less memory
             final Collection<? extends Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
                     .map(Health.class::cast)
@@ -111,9 +110,11 @@ public class HealthCheckerScheduler extends AdvancedScheduler {
                 if (consumable instanceof ISchedulable) {
                     final ISchedulable schedulable = (ISchedulable) consumables;
                     final String invokerTarget = schedulable.getTargetInvoker();
-                    if (invokerTarget == null)
+                    if (invokerTarget == null) {
                         LOG.warn("Activation with id {} has null target invoker and will not be processed.",
                                 schedulable.getActivationId());
+                        continue;
+                    }
                     if (!invokersHealth.containsKey(invokerTarget) ||
                             invokersHealth.get(invokerTarget).getKey() != State.HEALTHY) {
                         ConcurrentLinkedDeque<ISchedulable> invokerQueue =

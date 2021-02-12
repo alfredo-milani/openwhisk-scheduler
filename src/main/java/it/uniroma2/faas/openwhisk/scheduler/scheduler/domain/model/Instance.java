@@ -74,13 +74,14 @@ public class Instance {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Instance instance = (Instance) o;
-        return Objects.equals(uniqueName, instance.uniqueName) && Objects.equals(userMemory, instance.userMemory);
+        Instance instance1 = (Instance) o;
+        return instance == instance1.instance && instanceType == instance1.instanceType &&
+                Objects.equals(uniqueName, instance1.uniqueName) && Objects.equals(userMemory, instance1.userMemory);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(uniqueName, userMemory);
+        return Objects.hash(instance, instanceType, uniqueName, userMemory);
     }
 
     @Override

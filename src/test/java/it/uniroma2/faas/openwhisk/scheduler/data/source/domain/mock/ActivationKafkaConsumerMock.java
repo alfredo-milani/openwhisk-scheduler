@@ -96,7 +96,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
             try {
                 Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),
-                        "invoker" + random.ints(0, 2).findFirst().getAsInt(),
+                        "invoker" + random.ints(0, 3).findFirst().getAsInt(),
                         random.ints(0, 6).findFirst().getAsInt()),
                         Activation.class);
                 data.add(activation);

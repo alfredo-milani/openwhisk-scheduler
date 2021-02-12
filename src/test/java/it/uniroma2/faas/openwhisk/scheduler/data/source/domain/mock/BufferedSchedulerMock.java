@@ -1,38 +1,73 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.IBufferizable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Instance;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
+import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.HealthKafkaConsumerMock.HEALTH_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker.State.*;
 
 public class BufferedSchedulerMock extends AdvancedScheduler {
 
     private final static Logger LOG = LogManager.getLogger(BufferedScheduler.class.getCanonicalName());
 
+    public static final String TEMPLATE_COMPLETION_TOPIC = "completed%d";
+    public static final int THREAD_COUNT = 2;
+    public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
+    public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
+
+    private long healthCheckTimeLimitMs = HEALTH_CHECK_TIME_MS;
+    private long offlineTimeLimitMs = OFFLINE_TIME_LIMIT_MS;
+    private final SchedulerExecutors executors = new SchedulerExecutors(THREAD_COUNT, 0);
     private final Object mutex = new Object();
     // <targetInvoker, Invoker>
+    // invoker's kafka topic name used as unique id for invoker
+    // Note: must be externally synchronized to safely access Invoker entities
     private final Map<String, Invoker> invokersMap = new HashMap<>(24);
-    //
-    private final Queue<IBufferizable> bufferizableQueue = new ArrayDeque<>();
+    // <targetInvoker, Buffer>
+    // contains a mapping between an invoker id and its buffered activations
+    private final Map<String, Queue<IBufferizable>> invokerBufferMap = new HashMap<>(24);
+    // <targetInvoker, CompletionKafkaConsumer>
+    // contains all completion Kafka consumer associated with healthy invokers
+    private final Map<String, CompletionKafkaConsumerMock> invokerCompletionConsumerMap = new HashMap<>(24);
+    // default kafka properties for all completion Kafka consumers
+    private final Properties kafkaConsumerProperties = new Properties() {{
+        put(ConsumerConfig.GROUP_ID_CONFIG, "ow-scheduler-consumer");
+        put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
+        put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 1_000);
+        put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 15_000);
+        put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, 1);
+        put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 500);
+        put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 0);
+        put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+    }};
 
     public BufferedSchedulerMock(Scheduler scheduler) {
         super(scheduler);
     }
-
-    // TODO: should this method be synchronized?
 
     /**
      * Note: Apache OpenWhisk Controller component knows if invokers are overloaded, so upon
@@ -56,31 +91,35 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
             final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
             synchronized (mutex) {
                 for (final IBufferizable bufferizable : bufferizables) {
-                    Invoker invoker = invokersMap.get(bufferizable.getTargetInvoker());
-                    if (invoker == null) {
-                        final long newInvokerUserMemory = bufferizable.getUserMemory() == null
-                                ? 2048L
-                                // OPTIMIZE: create utils for manage byte unit like java.util.concurrent.TimeUnit
-                                : bufferizable.getUserMemory() / (1024 * 1024);
-                        final Invoker newInvoker = new Invoker(bufferizable.getTargetInvoker(), newInvokerUserMemory);
-                        invokersMap.put(bufferizable.getTargetInvoker(), newInvoker);
-                        invoker = newInvoker;
+                    final String invokerTarget = bufferizable.getTargetInvoker();
+                    final Invoker invoker = invokersMap.get(bufferizable.getTargetInvoker());
+
+                    // if there is not yet target invoker in the system or target invoker
+                    //   is not healthy, buffer activation
+                    if (invoker == null || !invoker.isHealthy()) {
+                        invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
+                        invokerBufferMap.get(invokerTarget).add(bufferizable);
+                        LOG.trace("Invoker {} not yet registered in the system or it is not healthy. Buffering activation with id {}.",
+                                invokerTarget, bufferizable.getActivationId());
+                        continue;
                     }
+
+                    // try acquire resource on target invoker
                     if (invoker.tryAcquireMemoryAndConcurrency(bufferizable)) {
                         invocationQueue.add(bufferizable);
                         LOG.trace("Scheduled activation {} - remaining memory on {}: {}.",
                                 bufferizable.getActivationId(), invoker.getInvokerName(), invoker.getMemory());
+                        // target invoker overloaded, so buffer activation
                     } else {
-                        bufferizableQueue.add(bufferizable);
-                        LOG.trace("System overloading (controller flag: {}), buffering activation {} for target {}.",
+                        invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
+                        invokerBufferMap.get(invokerTarget).add(bufferizable);
+                        LOG.trace("Detected system overload (controller flag: {}), buffering activation with id {} for target {}.",
                                 bufferizable.getOverload(), bufferizable.getActivationId(), bufferizable.getTargetInvoker());
                     }
                 }
-                if (bufferizableQueue.size() > 0) {
-                    LOG.trace("System overloading, buffering {} activations.", bufferizables.size());
-                }
             }
-            super.newEvent(stream, invocationQueue);
+            if (invocationQueue.size() > 0)
+                super.newEvent(stream, invocationQueue);
         } else if (stream.equals(COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
@@ -89,13 +128,106 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
             LOG.trace("Processing {} completion objects (over {} received).",
                     completions.size(), data.size());
             if (completions.size() > 0) {
+                //
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
+                //
+                final Map<String, Long> invokerCompletionCountMap = new HashMap<>();
                 synchronized (mutex) {
+                    // first free resources for all received completions
                     for (final Completion completion : completions) {
-                        final Invoker invoker = invokersMap.get(getInvokerTargetFrom(completion.getInstance()));
+                        final String invokerTarget = getInvokerTargetFrom(completion.getInstance());
                         final String activationId = completion.getActivationId() == null
+                                // if the request was blocking with result requested
                                 ? completion.getResponse().getActivationId()
+                                // if the request was non blocking
                                 : completion.getActivationId();
+                        final Invoker invoker = invokersMap.get(invokerTarget);
+
+                        // there is no reference to this invoker in the system
+                        if (invoker == null) continue;
+                        // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
+
+                        // if invoker target is not healthy, so no new activations can be scheduled on it
+                        if (!invoker.isHealthy()) continue;
+                        //
+                        Long count = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1L);
+                        //
+                        if (count != null) invokerCompletionCountMap.put(invokerTarget, ++count);
+                    }
+
+                    //
+                    if (invokerCompletionCountMap.size() > 0) {
+                        for (final Map.Entry<String, Long> entry : invokerCompletionCountMap.entrySet()) {
+                            final String invokerTarget = entry.getKey();
+                            final Invoker invoker = invokersMap.get(invokerTarget);
+
+                            if (invoker == null || !invoker.isHealthy()) continue;
+
+                            final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
+                            if (buffer == null || buffer.peek() == null) continue;
+
+                            Long completionCount = entry.getValue();
+                            if (completionCount == null) {
+                                LOG.warn("Map contains invokerTarget key but no value for completionCount.");
+                                continue;
+                            }
+                            while (completionCount > 0) {
+                                if (!invoker.tryAcquireMemoryAndConcurrency(buffer.peek())) break;
+                                invocationQueue.add(buffer.poll());
+                                --completionCount;
+                            }
+                        }
+                    }
+                }
+                if (invocationQueue.size() > 0)
+                    super.newEvent(ActivationKafkaConsumer.ACTIVATION_STREAM, invocationQueue);
+            }
+        } else if (stream.equals(HEALTH_STREAM)) {
+            // TODO: manage case when an invoker get updated with more/less memory
+            final Collection<? extends Health> heartbeats = data.stream()
+                    .filter(Health.class::isInstance)
+                    .map(Health.class::cast)
+                    // get only unique hearthbeat message
+                    .distinct()
+                    .collect(Collectors.toCollection(ArrayDeque::new));
+            LOG.trace("Processing {} uniques hearthbeats objects (over {} received).",
+                    heartbeats.size(), data.size());
+
+            if (heartbeats.size() > 0) {
+                synchronized (mutex) {
+                    for (final Health health : heartbeats) {
+                        final String invokerTarget = getInvokerTargetFrom(health.getInstance());
+                        Invoker invoker = invokersMap.get(invokerTarget);
+
+                        // invoker has not yet registered in the system
+                        if (invoker == null) {
+                            final Invoker newInvoker = new Invoker(invokerTarget, getUserMemoryFrom(health.getInstance()));
+                            // register new invoker
+                            invokersMap.put(invokerTarget, newInvoker);
+                            invoker = newInvoker;
+                            // create new completion Kafka consumer
+                            // assign its value to null to create it later (in health checking phase)
+                            invokerCompletionConsumerMap.putIfAbsent(invokerTarget, null);
+                        }
+
+                        // if invoker was already healthy, update its timestamp
+                        if (invoker.isHealthy()) {
+                            invoker.setUpdate(Instant.now().toEpochMilli());
+                            // invoker has become healthy
+                        } else {
+                            // upon receiving hearthbeat from invoker, mark that invoker as healthy
+                            invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
+
+                            final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
+                            // if there are buffered activations, send them all to activation stream
+                            //   and remove them from buffering queue
+                            if (buffer != null && buffer.size() > 0) {
+                                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>(buffer);
+                                buffer.clear();
+                                newEvent(ActivationKafkaConsumer.ACTIVATION_STREAM, invocationQueue);
+                            }
+                        }
                     }
                 }
             }
@@ -103,19 +235,101 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
             LOG.trace("Pass through stream {}.", stream.toString());
             super.newEvent(stream, data);
         }
+        healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
     }
 
-    private void createNewSubject() {
-        // TODO: create new subject for consuming Completion
+    @Override
+    public void shutdown() {
+        synchronized (mutex) {
+            LOG.trace("Closing {} completion kafka consumers.", invokerCompletionConsumerMap.size());
+            invokerCompletionConsumerMap.values().forEach(CompletionKafkaConsumerMock::close);
+        }
+        executors.shutdown();
+        super.shutdown();
     }
 
-    private void removeOldSubjects() {
-        // TODO: remove subject which not emit Completion for a while to free resources
+    private void healthCheck(long healthCheck, long offlineCheck) {
+        long now = Instant.now().toEpochMilli();
+        synchronized (mutex) {
+            for (final Invoker invoker : invokersMap.values()) {
+                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
+                if (now - invoker.getUpdate() > healthCheck) {
+                    // timestamp of the last update will not be updated
+                    invoker.updateState(UNHEALTHY);
+                    LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
+                }
+
+                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
+                if (now - invoker.getUpdate() > offlineCheck) {
+                    // timestamp of the last update will not be updated
+                    invoker.updateState(OFFLINE);
+                    LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
+                    // when invoker is marked as offline, release resources associated with it
+                    invokerBufferMap.remove(invoker.getInvokerName());
+                    final CompletionKafkaConsumerMock completionKafkaConsumer =
+                            invokerCompletionConsumerMap.remove(invoker.getInvokerName());
+                    if (completionKafkaConsumer != null) {
+                        // OPTIMIZE: should Kafka consumer shutdown be placed
+                        //   outside synchronized block ?
+                        completionKafkaConsumer.close();
+                    }
+                }
+
+                CompletionKafkaConsumerMock completionKafkaConsumer =
+                        invokerCompletionConsumerMap.get(invoker.getInvokerName());
+                // if there are completion Kafka consumers marked as null, they must be created
+                if (completionKafkaConsumer == null) {
+                    final String topic = String.format(TEMPLATE_COMPLETION_TOPIC,
+                            getInstanceFromInvokerTarget(invoker.getInvokerName()));
+                    LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
+                    // OPTIMIZE: should Kafka consumer creation be placed
+                    //   outside synchronized block ?
+                    completionKafkaConsumer =  new CompletionKafkaConsumerMock(
+                            List.of(topic), kafkaConsumerProperties, 100
+                    );
+                    invokerCompletionConsumerMap.put(invoker.getInvokerName(), completionKafkaConsumer);
+                    register(List.of(completionKafkaConsumer));
+                    completionKafkaConsumer.register(List.of(this));
+                    Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
+                }
+            }
+        }
+    }
+
+    private void createNewCompletionConsumerFor(int instance) {
+        final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
+        LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
+        final CompletionKafkaConsumerMock completionKafkaConsumer = new CompletionKafkaConsumerMock(
+                List.of(topic), kafkaConsumerProperties, 100
+        );
+        register(List.of(completionKafkaConsumer));
+        completionKafkaConsumer.register(List.of(this));
+        Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
     }
 
     public static @Nonnull String getInvokerTargetFrom(@Nonnull Instance instance) {
         checkNotNull(instance, "Instance can not be null.");
         return instance.getInstanceType().getName() + instance.getInstance();
+    }
+
+    public static long getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
+        checkNotNull(invokerTarget, "Invoker target can not be null.");
+        return Long.parseLong(invokerTarget.replace("invoker", ""));
+    }
+
+    /**
+     * Return user-memory in MiB.
+     *
+     * @param instance
+     * @return
+     */
+    public static long getUserMemoryFrom(@Nonnull Instance instance) {
+        checkNotNull(instance, "Instance can not be null.");
+        return Long.parseLong(instance.getUserMemory().split(" ")[0]) / (1024L * 1024L);
+    }
+
+    public void setKafkaBootstrapServers(@Nonnull String kafkaBootstrapServers) {
+        this.kafkaConsumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrapServers);
     }
 
 }
