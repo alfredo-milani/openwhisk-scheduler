@@ -1,4 +1,4 @@
-package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 

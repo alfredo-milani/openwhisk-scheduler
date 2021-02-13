@@ -86,17 +86,12 @@ public class SchedulerComponentTest {
         // define scheduler
         final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
-        Scheduler scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
-        LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
+        Scheduler scheduler;
         boolean tracerSchedulerOption = false;
         boolean bufferedSchedulerOption = true;
         boolean healthScheckerSchedulerOption = false;
-        if (tracerSchedulerOption) {
-            scheduler = new TracerSchedulerMock(scheduler);
-            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
-        }
         if (bufferedSchedulerOption) {
-            scheduler = new BufferedSchedulerMock(scheduler);
+            scheduler = new BufferedSchedulerMock(policy, activationsKafkaProducer);
             ((BufferedSchedulerMock) scheduler).setKafkaBootstrapServers("localhost:9092");
             LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
             final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
@@ -105,6 +100,14 @@ public class SchedulerComponentTest {
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
             closeables.add(healthKafkaConsumer);
+        } else {
+            scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
+        }
+        LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
+
+        if (tracerSchedulerOption) {
+            scheduler = new TracerSchedulerMock(scheduler);
+            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
         }
         if (healthScheckerSchedulerOption) {
             scheduler = new HealthCheckerSchedulerMock(scheduler);

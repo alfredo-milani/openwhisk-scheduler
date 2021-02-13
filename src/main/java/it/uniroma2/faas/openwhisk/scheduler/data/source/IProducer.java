@@ -8,8 +8,8 @@ import java.util.Collection;
 
 public interface IProducer extends Closeable {
 
-    <T extends IConsumable> void produce(@Nonnull final String topic, @Nonnull final T data);
+    void produce(@Nonnull final String topic, @Nonnull final IConsumable data);
 
-    <T extends IConsumable> void produce(@Nonnull final String topic, @Nonnull final Collection<T> data);
+    void produce(@Nonnull final String topic, @Nonnull final Collection<? extends IConsumable> data);
 
 }

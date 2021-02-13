@@ -2,7 +2,6 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -33,11 +32,6 @@ public abstract class AdvancedScheduler extends Scheduler {
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         scheduler.newEvent(stream, data);
-    }
-
-    @Override
-    public IPolicy getPolicy() {
-        return scheduler.getPolicy();
     }
 
     @Override

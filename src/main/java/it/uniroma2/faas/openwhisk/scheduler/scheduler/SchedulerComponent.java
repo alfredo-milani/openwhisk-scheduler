@@ -131,17 +131,11 @@ public class SchedulerComponent {
         // define scheduler
         final IPolicy policy = PolicyFactory.createPolicy(Policy.from(config.getSchedulerPolicy()));
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
-        Scheduler scheduler = new BaseScheduler(policy, activationsKafkaProducer);
-        LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
-        if (config.getSchedulerTracer()) {
-            scheduler = new TracerScheduler(scheduler);
-            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
-        }
+        Scheduler scheduler;
         if (config.getSchedulerBuffered()) {
-            scheduler = new BufferedScheduler(scheduler);
+            scheduler = new BufferedScheduler(policy, activationsKafkaProducer);
             // set kafka bootstrap servers
             ((BufferedScheduler) scheduler).setKafkaBootstrapServers(config.getKafkaBootstrapServers());
-            LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
             // register health kafka consumer
             final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
@@ -149,6 +143,13 @@ public class SchedulerComponent {
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
             closeables.add(healthKafkaConsumer);
+        } else {
+            scheduler = new BaseScheduler(policy, activationsKafkaProducer);
+        }
+        LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
+        if (config.getSchedulerTracer()) {
+            scheduler = new TracerScheduler(scheduler);
+            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
         }
 
         activationsKafkaConsumer.register(List.of(scheduler));

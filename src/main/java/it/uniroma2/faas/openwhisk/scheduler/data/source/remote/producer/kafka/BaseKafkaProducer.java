@@ -33,7 +33,7 @@ public class BaseKafkaProducer extends AbstractKafkaProducer {
     }
 
     @Override
-    public <T extends IConsumable> void produce(@Nonnull final String topic, @Nonnull final T datum) {
+    public void produce(@Nonnull final String topic, @Nonnull final IConsumable datum) {
         checkNotNull(topic, "Topic can not be null.");
         checkNotNull(datum, "Data can not be null.");
         try {
@@ -49,7 +49,7 @@ public class BaseKafkaProducer extends AbstractKafkaProducer {
 
     // OPTIMIZE: see@ http://cloudurable.com/blog/kafka-tutorial-kafka-producer-advanced-java-examples/index.html#:~:text=The%20Kafka%20Producer%20has%20a,acks%20to%20control%20record%20durability.
     @Override
-    public <T extends IConsumable> void produce(@Nonnull final String topic, @Nonnull final Collection<T> data) {
+    public void produce(@Nonnull final String topic, @Nonnull final Collection<? extends IConsumable> data) {
         checkNotNull(topic, "Topic can not be null.");
         checkNotNull(data, "Data can not be null.");
 

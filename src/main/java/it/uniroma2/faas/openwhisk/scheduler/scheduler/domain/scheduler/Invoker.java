@@ -1,4 +1,4 @@
-package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced;
+package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
 
@@ -10,7 +10,7 @@ import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.ContainerAction.DEFAULT_MEMORY_LIMIT_MiB;
+import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.ContainerAction.DEFAULT_MEMORY_LIMIT_MiB;
 
 /**
  * It is supposed that this class is externally synchronized.

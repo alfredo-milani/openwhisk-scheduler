@@ -3,8 +3,8 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.ITraceable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced.ITraceable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

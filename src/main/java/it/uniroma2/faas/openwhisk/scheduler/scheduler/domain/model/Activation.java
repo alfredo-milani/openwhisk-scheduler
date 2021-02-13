@@ -4,8 +4,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.IBufferizable;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.ITraceable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferizable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced.ITraceable;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

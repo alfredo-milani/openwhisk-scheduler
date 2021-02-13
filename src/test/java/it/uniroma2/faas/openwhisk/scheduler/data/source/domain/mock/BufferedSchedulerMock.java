@@ -1,13 +1,16 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
+import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.IBufferizable;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Instance;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferizable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -20,13 +23,16 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.HealthKafkaConsumerMock.HEALTH_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.advanced.Invoker.State.*;
+import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toCollection;
 
-public class BufferedSchedulerMock extends AdvancedScheduler {
+public class BufferedSchedulerMock extends Scheduler {
 
     private final static Logger LOG = LogManager.getLogger(BufferedScheduler.class.getCanonicalName());
 
@@ -34,9 +40,14 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
     public static final int THREAD_COUNT = 2;
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
+    public static final int MAX_BUFFER_SIZE = 100;
 
+    // time after which an invoker is marked as unhealthy
     private long healthCheckTimeLimitMs = HEALTH_CHECK_TIME_MS;
+    // time after which an invoker is marked as offline
     private long offlineTimeLimitMs = OFFLINE_TIME_LIMIT_MS;
+    // per invoker max queue size
+    protected int maxBufferSize = MAX_BUFFER_SIZE;
     private final SchedulerExecutors executors = new SchedulerExecutors(THREAD_COUNT, 0);
     private final Object mutex = new Object();
     // <targetInvoker, Invoker>
@@ -62,8 +73,29 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
         put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
     }};
 
-    public BufferedSchedulerMock(Scheduler scheduler) {
-        super(scheduler);
+    private final List<ISubject> subjects = new ArrayList<>();
+    // subclass can use scheduler's policy
+    private final IPolicy policy;
+    private final IProducer producer;
+
+    public BufferedSchedulerMock(@Nonnull IPolicy policy, @Nonnull IProducer producer) {
+        checkNotNull(policy, "Policy can not be null.");
+        checkNotNull(producer, "Producer can not be null.");
+
+        this.policy = policy;
+        this.producer = producer;
+    }
+
+    @Override
+    public void register(@Nonnull List<ISubject> subjects) {
+        checkNotNull(subjects, "Subjects can not be null.");
+        this.subjects.addAll(subjects);
+    }
+
+    @Override
+    public void unregister(@Nonnull List<ISubject> subjects) {
+        checkNotNull(subjects, "Subjects can not be null.");
+        this.subjects.removeAll(subjects);
     }
 
     /**
@@ -76,61 +108,48 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
+        // check if some invoker turned unhealthy or offline
+        healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
+
         if (stream.equals(ACTIVATION_STREAM)) {
             final Collection<IBufferizable> bufferizables = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
                     .collect(Collectors.toCollection(ArrayDeque::new));
-            if (bufferizables.size() != data.size()) {
-                LOG.warn("Non bufferizable objects discarded: {}.", data.size() - bufferizables.size());
-            }
+            LOG.trace("[ACT] - Processing {} bufferizables objects (over {} received).",
+                    bufferizables.size(), data.size());
 
-            final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-            synchronized (mutex) {
-                for (final IBufferizable bufferizable : bufferizables) {
-                    final String invokerTarget = bufferizable.getTargetInvoker();
-                    final Invoker invoker = invokersMap.get(bufferizable.getTargetInvoker());
-
-                    // if there is not yet target invoker in the system or target invoker
-                    //   is not healthy, buffer activation
-                    if (invoker == null || !invoker.isHealthy()) {
-                        invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
-                        invokerBufferMap.get(invokerTarget).add(bufferizable);
-                        LOG.trace("Invoker {} not yet registered or not healthy. Buffering activation with id {}.",
-                                invokerTarget, bufferizable.getActivationId());
-                        continue;
-                    }
-
-                    // try acquire resource on target invoker
-                    if (invoker.tryAcquireMemoryAndConcurrency(bufferizable)) {
-                        invocationQueue.add(bufferizable);
-                        LOG.trace("Scheduled activation {} - remaining memory on {}: {}.",
-                                bufferizable.getActivationId(), invoker.getInvokerName(), invoker.getMemory());
-                        // target invoker overloaded, so buffer activation
-                    } else {
-                        invokerBufferMap.putIfAbsent(invokerTarget, new ArrayDeque<>());
-                        invokerBufferMap.get(invokerTarget).add(bufferizable);
-                        LOG.trace("Detected system overload (controller flag: {}), buffering activation with id {} for target {}.",
-                                bufferizable.getOverload(), bufferizable.getActivationId(), bufferizable.getTargetInvoker());
-                    }
+            if (bufferizables.size() > 0) {
+                // invocation queue
+                final Queue<IBufferizable> invocationQueue;
+                synchronized (mutex) {
+                    // insert all received elements in the buffer,
+                    //   reorder the buffer using selected policy
+                    buffering(bufferizables);
+                    // remove from buffer all activations that can be processed on invokers
+                    //   (so, invoker has sufficient resources to process the activations)
+                    invocationQueue = pollAndAcquireResourcesForAllFlattened(
+                            new ArrayList<>(Collections.unmodifiableSet(invokersMap.keySet())));
                 }
+                if (invocationQueue.size() > 0) send(invocationQueue);
+                else LOG.trace("No resource available. Buffering activation (current queue {}).",
+                        invokerBufferMap.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
             }
-            if (invocationQueue.size() > 0)
-                super.newEvent(stream, invocationQueue);
         } else if (stream.equals(COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
                     .map(Completion.class::cast)
                     .collect(Collectors.toCollection(ArrayDeque::new));
-            LOG.trace("Processing {} completion objects (over {} received).",
+            LOG.trace("[CMP] - Processing {} completion objects (over {} received).",
                     completions.size(), data.size());
             if (completions.size() > 0) {
-                // contains activations to be sent
-                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-                // <invokerTarget, completionCount>
-                // mapping between invoker and its processed completions
-                final Map<String, Long> invokerCompletionCountMap = new HashMap<>();
+                // invocation queue
+                final Queue<IBufferizable> invocationQueue;
                 synchronized (mutex) {
+                    // <invokerTarget, completionCount>
+                    // mapping between invoker and its processed completions
+                    final Map<String, Integer> invokerCompletionCountMap = new HashMap<>(invokersMap.size());
+
                     // first, free resources for all received completions
                     for (final Completion completion : completions) {
                         final String invokerTarget = getInvokerTargetFrom(completion.getInstance());
@@ -145,71 +164,39 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                         if (invoker == null) continue;
                         // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
-                        // if invoker target is not healthy, so no new activations can be scheduled on it
-                        if (!invoker.isHealthy()) continue;
 
                         // if invoker target is healthy, insert max completionsCount of activations
                         //   that could be scheduled on it
-                        Long completionsCount = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1L);
+                        Integer completionsCount = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1);
                         if (completionsCount != null) invokerCompletionCountMap.put(invokerTarget, ++completionsCount);
                     }
 
                     // second, for all invokers that have produced at least one completion,
                     //   check if there is a buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
-                    for (final Map.Entry<String, Long> entry : invokerCompletionCountMap.entrySet()) {
-                        final String invokerTarget = entry.getKey();
-                        final Invoker invoker = invokersMap.get(invokerTarget);
-
-                        // double check on invoker
-                        if (invoker == null || !invoker.isHealthy()) continue;
-
-                        final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
-                        // if there are no buffered activations for current invoker, check next
-                        if (buffer == null || buffer.size() == 0) continue;
-
-                        // create new queue objects which contains the same elements from buffered queue
-                        //   but in the order specified by current policy
-                        final Queue<IBufferizable> bufferFromPolicy = applyPolicy(buffer);
-
-                        // for all completions processed by current invoker, submit all buffered activations
-                        //   for which invoker has sufficient resources
-                        Long completionsCount = entry.getValue();
-                        // double check
-                        if (completionsCount == null) {
-                            LOG.warn("Map contains invokerTarget key but no value for completionsCount.");
-                            continue;
-                        }
-                        for (final IBufferizable activation : bufferFromPolicy) {
-                            // checks if at least one of buffered activations can be submitted
-                            // note that it is not sufficient break iteration if can not be acquired
-                            //   memory and concurrency on current activation because it is possible that
-                            //   there is another activation in the buffered queue with requirements
-                            //   to be scheduled on current invoker
-                            if (completionsCount <= 0 || !invoker.tryAcquireMemoryAndConcurrency(activation))
-                                continue;
-                            invocationQueue.add(activation);
-                            buffer.remove(activation);
-                            --completionsCount;
-                        }
-                    }
+                    invocationQueue = pollAndAcquireAtMostResourcesForAllFlattened(invokerCompletionCountMap);
                 }
-                if (invocationQueue.size() > 0)
-                    super.newEvent(ACTIVATION_STREAM, invocationQueue);
+                // send activations
+                if (invocationQueue.size() > 0) send(invocationQueue);
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
             final Collection<? extends Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
                     .map(Health.class::cast)
-                    // get only unique hearthbeat message
+                    // get only unique hearth-beats messages
                     .distinct()
                     .collect(Collectors.toCollection(ArrayDeque::new));
-            LOG.trace("Processing {} uniques hearthbeats objects (over {} received).",
+            LOG.trace("[HLT] - Processing {} uniques hearth-beats objects (over {} received).",
                     heartbeats.size(), data.size());
 
             if (heartbeats.size() > 0) {
+                // invocation queue
+                final Queue<IBufferizable> invocationQueue;
                 synchronized (mutex) {
+                    // contains id of invokers that have turned healthy
+                    final List<String> invokersTurnedHealthy = new ArrayList<>();
+
                     for (final Health health : heartbeats) {
                         final String invokerTarget = getInvokerTargetFrom(health.getInstance());
                         Invoker invoker = invokersMap.get(invokerTarget);
@@ -235,23 +222,21 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                             invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
                             LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
 
-                            final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
-                            // if there are buffered activations, send them all to activation stream
-                            //   and remove them from buffering queue
-                            if (buffer != null && buffer.size() > 0) {
-                                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>(buffer);
-                                buffer.clear();
-                                newEvent(ACTIVATION_STREAM, invocationQueue);
-                            }
+                            // add invoker to the list of invokers that have turned healthy
+                            invokersTurnedHealthy.add(invokerTarget);
                         }
                     }
+                    // remove all activations from buffer for which invokers
+                    //   that have turned healthy can handle
+                    invocationQueue = pollAndAcquireResourcesForAllFlattened(invokersTurnedHealthy);
                 }
+                // send activations
+                if (invocationQueue.size() > 0) send(invocationQueue);
             }
         } else {
-            LOG.trace("Pass through stream {}.", stream.toString());
-            super.newEvent(stream, data);
+            LOG.trace("Unable to manage data from stream {}.", stream.toString());
         }
-        healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
+        checkIfCreateCompletionKafkaConsumers();
     }
 
     @Override
@@ -261,33 +246,151 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
             invokerCompletionConsumerMap.values().forEach(CompletionKafkaConsumerMock::close);
         }
         executors.shutdown();
-        super.shutdown();
+        LOG.trace("{} shutdown.", this.getClass().getSimpleName());
     }
 
-    /**
-     * Create new {@link IBufferizable} queue with the same elements from input queue but in the order
-     * specified by selected policy.
-     *
-     * @param queue input queue.
-     * @return new queue with elements in custom order.
-     */
-    private @Nonnull Queue<IBufferizable> applyPolicy(@Nonnull Queue<IBufferizable> queue) {
-        checkNotNull(queue, "Queue can not be null.");
-        return (Queue<IBufferizable>) getPolicy().apply(queue);
+    private void buffering(@Nonnull Collection<IBufferizable> bufferizables) {
+        checkNotNull(bufferizables, "Input collection can not be null.");
+        final Map<String, Collection<IBufferizable>> invokerCollectionMap = bufferizables.stream()
+                .collect(groupingBy(IBufferizable::getTargetInvoker, toCollection(ArrayList::new)));
+        buffering(invokerCollectionMap);
+    }
+
+    private void buffering(@Nonnull Map<String, Collection<IBufferizable>> invokerBufferizableMap) {
+        invokerBufferizableMap.forEach(this::buffering);
+    }
+
+    private void buffering(@Nonnull String invoker, @Nonnull Collection<IBufferizable> bufferizables) {
+        checkNotNull(invoker, "Invoker target can not be null.");
+        checkNotNull(bufferizables, "Input collection can not be null.");
+        if (bufferizables.isEmpty()) return;
+        synchronized (mutex) {
+            invokerBufferMap.putIfAbsent(invoker, new ArrayDeque<>());
+            Queue<IBufferizable> buffer = invokerBufferMap.get(invoker);
+
+            // remove old activations if buffer exceed its max size
+            final int total = buffer.size() + bufferizables.size();
+            if (total > maxBufferSize) {
+                // creating new array dequeue to use #removeLast method
+                buffer = new ArrayDeque<>(buffer);
+                final int toRemove = total - maxBufferSize;
+                for (int i = 0; i < toRemove; ++i) ((ArrayDeque<IBufferizable>) buffer).removeLast();
+                LOG.trace("Reached buffer limit for invoker {} - discarding last {} activations.",
+                        invoker, toRemove);
+            }
+            // add all new activations
+            buffer.addAll(bufferizables);
+
+            invokerBufferMap.put(invoker, (Queue<IBufferizable>) policy.apply(buffer));
+        }
+    }
+
+    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull List<String> invokers) {
+        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireResourcesForAll(invokers);
+        return invokerQueueMap.values().stream()
+                .flatMap(Queue::stream)
+                .collect(Collectors.toCollection(ArrayDeque::new));
+    }
+
+    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireResourcesForAll(@Nonnull List<String> invokers) {
+        checkNotNull(invokers, "Invokers list can not be null.");
+        final int max = Integer.MAX_VALUE;
+        final Map<String, Integer> invokerCountMap = new HashMap<>(invokers.size());
+        for (final String invoker : invokers) {
+            invokerCountMap.put(invoker, max);
+        }
+        return pollAndAcquireAtMostResourcesForAll(invokerCountMap);
+    }
+
+    private @Nonnull Queue<IBufferizable> pollAndAcquireAtMostResourcesForAllFlattened(@Nonnull Map<String, Integer> invokers) {
+        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireAtMostResourcesForAll(invokers);
+        return invokerQueueMap.values().stream()
+                .flatMap(Queue::stream)
+                .collect(Collectors.toCollection(ArrayDeque::new));
+    }
+
+    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireAtMostResourcesForAll(@Nonnull Map<String, Integer> invokers) {
+        checkNotNull(invokers, "Invokers list can not be null.");
+        final Map<String, Queue<IBufferizable>> invokerBufferizableMap = new HashMap<>(invokers.size());
+        synchronized (mutex) {
+            // second, for all invokers specified check if there is a buffered activation
+            //   that can be scheduled on it (so, if it has necessary resources)
+            for (final Map.Entry<String, Integer> entry : invokers.entrySet()) {
+                final String invokerTarget = entry.getKey();
+                final Invoker invoker = invokersMap.get(invokerTarget);
+
+                // if invoker target is not healthy, so no new activations can be scheduled on it
+                if (invoker == null || !invoker.isHealthy()) continue;
+
+                // elements inside buffer are already sorted, using selected policy, in the order
+                //   they should be submitted
+                final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
+                // if there are no buffered activations for current invoker, check next
+                if (buffer == null || buffer.isEmpty()) continue;
+
+                // for all completions processed by current invoker, submit all buffered activations
+                //   for which invoker has sufficient resources
+                Integer count = entry.getValue();
+                // double check
+                if (count == null) {
+                    LOG.warn("Map contains invokerTarget key but no value for count.");
+                    continue;
+                }
+                // invocation queue
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
+                // using iterator to remove activation from source buffer if condition is met
+                final Iterator<IBufferizable> bufferIterator = buffer.iterator();
+                while (bufferIterator.hasNext()) {
+                    final IBufferizable activation = bufferIterator.next();
+                    // checks if at least one of buffered activations can be submitted
+                    // note that it is not sufficient break iteration if can not be acquired
+                    //   memory and concurrency on current activation because it is possible that
+                    //   there is another activation in the buffered queue with requirements
+                    //   to be scheduled on current invoker
+                    if (count <= 0 || !invoker.tryAcquireMemoryAndConcurrency(activation))
+                        continue;
+                    invocationQueue.add(activation);
+                    bufferIterator.remove();
+                    --count;
+                    LOG.trace("Acquired resources on invoker {} - remaining memory {}.",
+                            invoker.getInvokerName(), invoker.getMemory());
+                }
+                // if there is at least one activation which fulfill requirements, add to map
+                if (invocationQueue.size() > 0) invokerBufferizableMap.put(invokerTarget, invocationQueue);
+            }
+        }
+        if (invokerBufferizableMap.keySet().size() < invokers.keySet().size()) {
+            final Set<String> invokersKeyCopy = new HashSet<>(invokers.keySet());
+            invokersKeyCopy.removeAll(invokerBufferizableMap.keySet());
+            LOG.trace("No resource can be acquired on {}. Buffering activations (current queue {}).",
+                    invokersKeyCopy, invokerBufferMap.entrySet().stream()
+                            .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
+        }
+        return invokerBufferizableMap;
+    }
+
+    private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
+        checkNotNull(schedulables, "Schedulables to send can not be null.");
+        schedulables.forEach(schedulable -> {
+            // if activation has not target invoker, abort its processing
+            if (schedulable.getTargetInvoker() == null) {
+                LOG.warn("Invalid target invoker (null) for activation with id {}.",
+                        schedulable.getActivationId());
+            } else {
+                LOG.trace("Writing activation with id {} (priority {}) in {} topic.",
+                        schedulable.getActivationId(), schedulable.getPriority(), schedulable.getTargetInvoker());
+                producer.produce(schedulable.getTargetInvoker(), schedulable);
+            }
+        });
     }
 
     private void healthCheck(long healthCheck, long offlineCheck) {
+        checkArgument(healthCheck < offlineCheck,
+                "Offline check time must be > of health check time.");
         long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
-                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getTimestamp() > healthCheck) {
-                    // timestamp of the last update will not be updated
-                    invoker.updateState(UNHEALTHY);
-                    LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
-                }
-
-                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
+                // if invoker has not sent hearth-beat in delta, mark it as offline
                 if (now - invoker.getTimestamp() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
@@ -302,30 +405,38 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
                         //   outside synchronized block ?
                         completionKafkaConsumer.close();
                     }
+                    // continue because if invoker is offline is also unhealthy
+                    continue;
                 }
 
-                CompletionKafkaConsumerMock completionKafkaConsumer =
-                        invokerCompletionConsumerMap.get(invoker.getInvokerName());
-                // if there are completion Kafka consumers marked as null, they must be created
-                if (completionKafkaConsumer == null) {
-                    final String topic = String.format(TEMPLATE_COMPLETION_TOPIC,
-                            getInstanceFromInvokerTarget(invoker.getInvokerName()));
-                    LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
-                    // OPTIMIZE: should Kafka consumer creation be placed
-                    //   outside synchronized block ?
-                    completionKafkaConsumer =  new CompletionKafkaConsumerMock(
-                            List.of(topic), kafkaConsumerProperties, 100
-                    );
-                    invokerCompletionConsumerMap.put(invoker.getInvokerName(), completionKafkaConsumer);
-                    register(List.of(completionKafkaConsumer));
-                    completionKafkaConsumer.register(List.of(this));
-                    Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
+                // if invoker has not sent hearth-beat in delta, mark it as unhealthy
+                if (now - invoker.getTimestamp() > healthCheck) {
+                    // timestamp of the last update will not be updated
+                    invoker.updateState(UNHEALTHY);
+                    LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
                 }
             }
         }
     }
 
-    private void createNewCompletionConsumerFor(int instance) {
+    private void checkIfCreateCompletionKafkaConsumers() {
+        synchronized (mutex) {
+            for (final String invokerTarget : invokersMap.keySet()) {
+                CompletionKafkaConsumerMock completionKafkaConsumer =
+                        invokerCompletionConsumerMap.get(invokerTarget);
+                // if there are completion Kafka consumers marked as null, they must be created
+                if (completionKafkaConsumer == null) {
+                    final int invokerInstance = getInstanceFromInvokerTarget(invokerTarget);
+                    // OPTIMIZE: should Kafka consumer creation be placed
+                    //   outside synchronized block ?
+                    invokerCompletionConsumerMap.put(invokerTarget,
+                            createCompletionConsumerFrom(invokerInstance));
+                }
+            }
+        }
+    }
+
+    private @Nonnull CompletionKafkaConsumerMock createCompletionConsumerFrom(int instance) {
         final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
         LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
         final CompletionKafkaConsumerMock completionKafkaConsumer = new CompletionKafkaConsumerMock(
@@ -334,6 +445,7 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
         register(List.of(completionKafkaConsumer));
         completionKafkaConsumer.register(List.of(this));
         Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
+        return completionKafkaConsumer;
     }
 
     public static @Nonnull String getInvokerTargetFrom(@Nonnull Instance instance) {
@@ -341,9 +453,9 @@ public class BufferedSchedulerMock extends AdvancedScheduler {
         return instance.getInstanceType().getName() + instance.getInstance();
     }
 
-    public static long getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
+    public static int getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
         checkNotNull(invokerTarget, "Invoker target can not be null.");
-        return Long.parseLong(invokerTarget.replace("invoker", ""));
+        return Integer.parseInt(invokerTarget.replace("invoker", ""));
     }
 
     /**

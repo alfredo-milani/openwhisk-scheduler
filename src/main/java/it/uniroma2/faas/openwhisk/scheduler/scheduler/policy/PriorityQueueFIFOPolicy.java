@@ -20,6 +20,8 @@ class PriorityQueueFIFOPolicy implements IPolicy {
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Consumables can not be null.");
 
+        // OPTIMIZE: can be optimized using sorted insertions
+
         // higher priority to activations with higher priority level (priority level represented as integer)
         // TreeMap default order is ascending, so here is used Comparator provided from Collections to get reverse order
         final SortedMap<Integer, Queue<ISchedulable>> prioritiesQueuesMap = new TreeMap<>(Collections.reverseOrder());

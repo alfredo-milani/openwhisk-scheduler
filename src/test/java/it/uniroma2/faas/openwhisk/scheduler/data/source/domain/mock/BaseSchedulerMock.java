@@ -43,11 +43,6 @@ public class BaseSchedulerMock extends Scheduler {
     }
 
     @Override
-    public IPolicy getPolicy() {
-        return policy;
-    }
-
-    @Override
     public void newEvent(@Nonnull UUID stream, @Nonnull final Collection<?> data) {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
