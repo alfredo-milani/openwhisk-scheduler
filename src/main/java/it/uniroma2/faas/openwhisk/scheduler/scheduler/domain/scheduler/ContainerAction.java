@@ -106,7 +106,8 @@ public class ContainerAction extends Action {
         if (concurrency > 0) {
             --concurrency;
             // remove all unused containers, that is containers with concurrency level of 0
-            removeContainers((containersCount * concurrencyLimit - concurrency) / concurrencyLimit);
+            long count = (containersCount * concurrencyLimit - concurrency) / concurrencyLimit;
+            if (count > 0) removeContainers(count);
         }
     }
 
@@ -121,7 +122,7 @@ public class ContainerAction extends Action {
      * @param containers number of containers to remove.
      */
     public void removeContainers(long containers) {
-        checkArgument(containers > 0, "Numbers of containers to remove must be > 0.");
+        checkArgument(containers >= 0, "Numbers of containers to remove must be > 0.");
         // must remain at least one container running
         if (containers >= containersCount) containersCount = 1;
         else containersCount -= containers;

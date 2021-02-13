@@ -59,7 +59,7 @@ public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
             e.printStackTrace();
         }
         final Collection<Health> data = new ArrayDeque<>(10);
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 1; ++i) {
             try {
                 int invoker = random.ints(0, 3).findFirst().getAsInt();
                 Health activation = objectMapper.readValue(String.format(

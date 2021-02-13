@@ -4,7 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.FailureCompletion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.NonBlockingCompletion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,6 +47,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     private final Random random = new Random();
     private final String completionBlockingResult = "{\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"response\":{\"activationId\":\"50bd97db9fef433abd97db9fef933ab1\",\"annotations\":[{\"key\":\"path\",\"value\":\"guest/sleep_one\"},{\"key\":\"waitTime\",\"value\":4545},{\"key\":\"kind\",\"value\":\"python:3\"},{\"key\":\"timeout\",\"value\":false},{\"key\":\"limits\",\"value\":{\"concurrency\":5,\"logs\":10,\"memory\":256,\"timeout\":60000}},{\"key\":\"initTime\",\"value\":28}],\"duration\":1037,\"end\":1612889796543,\"logs\":[],\"name\":\"sleep_one\",\"namespace\":\"guest\",\"publish\":false,\"response\":{\"result\":{\"sleep_one\":{\"$scheduler\":{\"limits\":{\"concurrency\":5,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"target\":\"invoker0\"},\"scheduler\":{\"priority\":0,\"target\":\"invoker0\"},\"sleep\":1}},\"size\":199,\"statusCode\":0},\"start\":1612889795506,\"subject\":\"guest\",\"version\":\"0.0.1\"},\"transid\":[\"iud25hHHjA0mtOTri9nKePhEnDhcMpH2\",1612889790960]}";
     private final String completionNonBlocking = "{\"activationId\":\"811bd520fa794dbe9bd520fa793dbef3\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"MSCztINkcSGlhgeQT6H7YJAPaDVNO0nK\",1612935312054]}";
+    private final String completionFailure = "{\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":true,\"response\":\"9376ac0a2ed848abb6ac0a2ed818ab0b\",\"transid\":[\"VqtARfumgJ3EcWpjjUHRm8zGytUKseup\",1613235607414]}";
 
     /**
      * It is assumed that only one thread per instance calls this method.
@@ -52,24 +56,33 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     @Override
     public @Nullable Collection<Completion> consume() {
         try {
-            TimeUnit.SECONDS.sleep(2);
+            TimeUnit.SECONDS.sleep(15);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
         final Collection<Completion> data = new ArrayDeque<>(10);
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 2; ++i) {
             try {
-                Completion completion = objectMapper.readValue(String.format(completionNonBlocking), Completion.class);
+                Completion completion = objectMapper.readValue(String.format(completionNonBlocking), NonBlockingCompletion.class);
                 data.add(completion);
             } catch (JsonProcessingException e) {
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
         }
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 2; ++i) {
             try {
-                Completion completion = objectMapper.readValue(String.format(completionBlockingResult), Completion.class);
+                Completion completion = objectMapper.readValue(String.format(completionBlockingResult), BlockingCompletion.class);
+                data.add(completion);
+            } catch (JsonProcessingException e) {
+                LOG.warn("Exception parsing Activation from record: ");
+                e.printStackTrace();
+            }
+        }
+        for (int i = 0; i < 2; ++i) {
+            try {
+                Completion completion = objectMapper.readValue(String.format(completionFailure), FailureCompletion.class);
                 data.add(completion);
             } catch (JsonProcessingException e) {
                 LOG.warn("Exception parsing Activation from record: ");

@@ -87,12 +87,12 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
     @Override
     public @Nullable Collection<Activation> consume() {
         try {
-            TimeUnit.SECONDS.sleep(1);
+            TimeUnit.SECONDS.sleep(2);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
         final Collection<Activation> data = new ArrayDeque<>(10);
-        for (int i = 0; i < 50; ++i) {
+        for (int i = 0; i < 15; ++i) {
             try {
                 Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),

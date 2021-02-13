@@ -43,7 +43,6 @@ public class SchedulerComponent {
 
     public static final String SCHEDULER_TOPIC = "scheduler";
     public static final String HEALTH_TOPIC = "health";
-    public static final String COMPLETION_TOPIC = "completed";
 
     private final Config config;
 
@@ -83,6 +82,8 @@ public class SchedulerComponent {
         LOG.info("v{}", config.getVersion());
         LOG.debug(config.toString());
 
+        // TODO: implement custom executor service to restart threads in case of crash
+        //   see@ https://aozturk.medium.com/how-to-handle-uncaught-exceptions-in-java-abf819347906
         // create global app executors
         SchedulerExecutors executors = new SchedulerExecutors(0, 2);
 

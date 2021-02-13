@@ -2,7 +2,6 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferizable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced.ITraceable;
@@ -16,7 +15,7 @@ import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
+// @JsonInclude(JsonInclude.Include.NON_NULL)
 public final class Activation implements ITraceable, IBufferizable {
 
     /*

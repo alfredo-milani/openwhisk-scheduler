@@ -4,10 +4,7 @@ import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Health;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Instance;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferizable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
@@ -40,12 +37,16 @@ public class BufferedScheduler extends Scheduler {
     public static final int THREAD_COUNT = 2;
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
+    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(10);
     public static final int MAX_BUFFER_SIZE = 500;
 
     // time after which an invoker is marked as unhealthy
     private long healthCheckTimeLimitMs = HEALTH_CHECK_TIME_MS;
     // time after which an invoker is marked as offline
     private long offlineTimeLimitMs = OFFLINE_TIME_LIMIT_MS;
+    // time after which running activations on invokers are removed
+    //   (security measure to not block invoker in case completion message is missing)
+    private long runningActivationTimeLimitMs = RUNNING_ACTIVATION_TIME_LIMIT_MS;
     // per invoker max queue size
     protected int maxBufferSize = MAX_BUFFER_SIZE;
     private final SchedulerExecutors executors = new SchedulerExecutors(THREAD_COUNT, 0);
@@ -123,19 +124,22 @@ public class BufferedScheduler extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue;
                 synchronized (mutex) {
+                    // release activations too old, assuming there was an error sending completion
+                    // check performed in this branch to reduce its frequency
+                    releaseActivationsOlderThan(runningActivationTimeLimitMs);
+
                     // insert all received elements in the buffer,
                     //   reorder the buffer using selected policy
                     buffering(bufferizables);
                     // remove from buffer all activations that can be processed on invokers
                     //   (so, invoker has sufficient resources to process the activations)
-                    invocationQueue = pollAndAcquireResourcesForAllFlattened(
-                            new ArrayList<>(invokersMap.keySet()));
+                    invocationQueue = new ArrayDeque<>(pollAndAcquireResourcesForAllFlattened(
+                            new ArrayList<>(invokersMap.keySet())));
                 }
-                // sending activations
-                if (invocationQueue.size() > 0) send(invocationQueue);
-                else LOG.trace("No resource available. Buffering activation (current queue {}).",
-                        invokerBufferMap.entrySet().stream()
-                                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
+                // send activations
+                if (!invocationQueue.isEmpty()) send(invocationQueue);
+                else LOG.trace("Not enough resources or unhealthy invokers - {}.",
+                        invokersMap.keySet());
             }
         } else if (stream.equals(COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
@@ -146,7 +150,7 @@ public class BufferedScheduler extends Scheduler {
                     completions.size(), data.size());
             if (completions.size() > 0) {
                 // invocation queue
-                final Queue<IBufferizable> invocationQueue;
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
                     // <invokerTarget, completionCount>
                     // mapping between invoker and its processed completions
@@ -155,11 +159,17 @@ public class BufferedScheduler extends Scheduler {
                     // first, free resources for all received completions
                     for (final Completion completion : completions) {
                         final String invokerTarget = getInvokerTargetFrom(completion.getInstance());
-                        final String activationId = completion.getActivationId() == null
-                                // if the request was blocking with result requested
-                                ? completion.getResponse().getActivationId()
-                                // if the request was non blocking
-                                : completion.getActivationId();
+                        final String activationId;
+                        if (completion instanceof NonBlockingCompletion) {
+                            activationId = ((NonBlockingCompletion) completion).getActivationId();
+                        } else if (completion instanceof BlockingCompletion) {
+                            activationId = ((BlockingCompletion) completion).getResponse().getActivationId();
+                        } else if (completion instanceof FailureCompletion) {
+                            activationId = ((FailureCompletion) completion).getResponse();
+                        } else {
+                            LOG.trace("Failing to process completion from invoker {}.", invokerTarget);
+                            continue;
+                        }
                         final Invoker invoker = invokersMap.get(invokerTarget);
 
                         // there is no reference to this invoker in the system
@@ -176,10 +186,14 @@ public class BufferedScheduler extends Scheduler {
                     // second, for all invokers that have produced at least one completion,
                     //   check if there is a buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
-                    invocationQueue = pollAndAcquireAtMostResourcesForAllFlattened(invokerCompletionCountMap);
+                    if (!invokerCompletionCountMap.isEmpty())
+                        invocationQueue.addAll(
+                                pollAndAcquireAtMostResourcesForAllFlattened(invokerCompletionCountMap));
                 }
                 // send activations
-                if (invocationQueue.size() > 0) send(invocationQueue);
+                if (!invocationQueue.isEmpty()) send(invocationQueue);
+                else LOG.trace("Not enough resources or unhealthy invokers - {}.",
+                        invokersMap.keySet());
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
@@ -189,12 +203,12 @@ public class BufferedScheduler extends Scheduler {
                     // get only unique hearth-beats messages
                     .distinct()
                     .collect(Collectors.toCollection(ArrayDeque::new));
-            LOG.trace("[HLT]] - Processing {} uniques hearth-beats objects (over {} received).",
-                    heartbeats.size(), data.size());
+            /*LOG.trace("[HLT] - Processing {} uniques hearth-beats objects (over {} received).",
+                    heartbeats.size(), data.size());*/
 
             if (heartbeats.size() > 0) {
                 // invocation queue
-                final Queue<IBufferizable> invocationQueue;
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
                     // contains id of invokers that have turned healthy
                     final List<String> invokersTurnedHealthy = new ArrayList<>();
@@ -230,15 +244,18 @@ public class BufferedScheduler extends Scheduler {
                     }
                     // remove all activations from buffer for which invokers
                     //   that have turned healthy can handle
-                    invocationQueue = pollAndAcquireResourcesForAllFlattened(invokersTurnedHealthy);
+                    if (!invokersTurnedHealthy.isEmpty())
+                        invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(invokersTurnedHealthy));
                 }
                 // send activations
-                if (invocationQueue.size() > 0) send(invocationQueue);
+                if (!invocationQueue.isEmpty()) send(invocationQueue);
+                else LOG.trace("Not enough resources or unhealthy invokers - {}.",
+                        invokersMap.keySet());
+                checkIfCreateCompletionKafkaConsumers();
             }
         } else {
             LOG.trace("Unable to manage data from stream {}.", stream.toString());
         }
-        checkIfCreateCompletionKafkaConsumers();
     }
 
     @Override
@@ -277,8 +294,8 @@ public class BufferedScheduler extends Scheduler {
                 buffer = new ArrayDeque<>(buffer);
                 final int toRemove = total - maxBufferSize;
                 for (int i = 0; i < toRemove; ++i) ((ArrayDeque<IBufferizable>) buffer).removeLast();
-                LOG.trace("Reached buffer limit for invoker {} - discarding last {} activations.",
-                        invoker, toRemove);
+                LOG.trace("Reached buffer limit ({}) for invoker {} - discarding last {} activations.",
+                        maxBufferSize, invoker, toRemove);
             }
             // add all new activations
             buffer.addAll(bufferizables);
@@ -363,10 +380,11 @@ public class BufferedScheduler extends Scheduler {
         if (invokerBufferizableMap.keySet().size() < invokers.keySet().size()) {
             final Set<String> invokersKeyCopy = new HashSet<>(invokers.keySet());
             invokersKeyCopy.removeAll(invokerBufferizableMap.keySet());
-            LOG.trace("No resource can be acquired on {}. Buffering activations (current queue {}).",
-                    invokersKeyCopy, invokerBufferMap.entrySet().stream()
-                            .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
+            LOG.trace("No resources scheduled on {} - empty buffer or not enough resources.",
+                    invokersKeyCopy);
         }
+        LOG.trace("Actual buffer - {}.", invokerBufferMap.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
         return invokerBufferizableMap;
     }
 
@@ -415,6 +433,26 @@ public class BufferedScheduler extends Scheduler {
                     // timestamp of the last update will not be updated
                     invoker.updateState(UNHEALTHY);
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
+                }
+            }
+        }
+    }
+
+    /**
+     * For each invoker, release resources associated with activations older than delta.
+     *
+     * @param delta time after which remove activations.
+     */
+    private void releaseActivationsOlderThan(long delta) {
+        checkArgument(delta >= 0, "Delta time must be >= 0.");
+        synchronized (mutex) {
+            for (final Invoker invoker : invokersMap.values()) {
+                final long activationsBefore = invoker.getActivationsCount();
+                invoker.releaseAllOldThan(delta);
+                final long activationsAfter = invoker.getActivationsCount();
+                if (activationsAfter < activationsBefore) {
+                    LOG.trace("Removed {} old activations from invoker {} (time delta: {} ms).",
+                            activationsBefore - activationsAfter, invoker.getInvokerName(), delta);
                 }
             }
         }
@@ -488,6 +526,14 @@ public class BufferedScheduler extends Scheduler {
 
     public void setOfflineTimeLimitMs(long offlineTimeLimitMs) {
         this.offlineTimeLimitMs = offlineTimeLimitMs;
+    }
+
+    public long getRunningActivationTimeLimitMs() {
+        return runningActivationTimeLimitMs;
+    }
+
+    public void setRunningActivationTimeLimitMs(long runningActivationTimeLimitMs) {
+        this.runningActivationTimeLimitMs = runningActivationTimeLimitMs;
     }
 
     public int getMaxBufferSize() {

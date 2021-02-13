@@ -2,7 +2,10 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.FailureCompletion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.NonBlockingCompletion;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.logging.log4j.LogManager;
@@ -59,9 +62,17 @@ public class CompletionKafkaConsumer extends AbstractKafkaConsumer<Completion> {
         final Collection<Completion> data = new ArrayDeque<>(records.count());
         for (ConsumerRecord<String, String> r : records) {
             try {
-                data.add(objectMapper.readValue(r.value(), Completion.class));
-            } catch (JsonProcessingException e) {
-                LOG.warn("Exception parsing Activation from record: {}.", r.value());
+                data.add(objectMapper.readValue(r.value(), NonBlockingCompletion.class));
+            } catch (JsonProcessingException e0) {
+                try {
+                    data.add(objectMapper.readValue(r.value(), BlockingCompletion.class));
+                } catch (JsonProcessingException e1) {
+                    try {
+                        data.add(objectMapper.readValue(r.value(), FailureCompletion.class));
+                    } catch (JsonProcessingException e2) {
+                        LOG.warn("Exception parsing Activation from record: {}.", r.value());
+                    }
+                }
             }
         }
         LOG.trace("Sending {} consumable to observers.", data.size());

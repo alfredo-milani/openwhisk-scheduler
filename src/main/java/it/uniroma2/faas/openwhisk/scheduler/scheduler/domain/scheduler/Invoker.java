@@ -4,9 +4,11 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -36,6 +38,9 @@ public class Invoker {
     // <ActivationID, ContainerAction>
     // maintaining a mapping between activation ids and containers to fast remove activations
     private final Map<String, ContainerAction> activationContainerMap;
+    // <ActivationID, timestamp>
+    // maintaining a mapping between activation and timestamp of successfully acquired concurrency
+    private final Map<String, Long> activationTimestampMap;
 
     // available memory
     private long memory;
@@ -67,6 +72,10 @@ public class Invoker {
                 (int) (userMemory / MID_ACTION_CONTAINER_MEMORY_MiB * DEFAULT_ACTION_CONTAINER_LOAD_FACTOR),
                 DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR
         );
+        this.activationTimestampMap = new HashMap<>(
+                (int) (userMemory / MID_ACTION_CONTAINER_MEMORY_MiB * DEFAULT_ACTION_CONTAINER_LOAD_FACTOR),
+                DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR
+        );
     }
 
     public boolean tryAcquireConcurrency(@Nonnull final IBufferizable bufferizable) {
@@ -79,7 +88,10 @@ public class Invoker {
         if (containerAction != null) {
             // check if the container can handle another activation
             if (containerAction.tryAcquireConcurrency()) {
+                // insert new activation in current invoker
                 activationContainerMap.put(bufferizable.getActivationId(), containerAction);
+                // insert timestamp for new activation inserted in current invoker
+                activationTimestampMap.put(bufferizable.getActivationId(), Instant.now().toEpochMilli());
                 return true;
             }
         }
@@ -126,6 +138,7 @@ public class Invoker {
     public void release(@Nonnull final String activationId) {
         checkNotNull(activationId, "Activation ID can not be null.");
 
+        activationTimestampMap.remove(activationId);
         final ContainerAction containerAction = activationContainerMap.remove(activationId);
         if (containerAction != null) {
             final long containersCountBeforeRelease = containerAction.getContainersCount();
@@ -135,6 +148,16 @@ public class Invoker {
                 memory += containersReleased * containerAction.getMemoryLimit();
             }
         }
+    }
+
+    public void releaseAllOldThan(long delta) {
+        checkArgument(delta >= 0, "Delta time must be >= 0.");
+        final long now = Instant.now().toEpochMilli();
+        activationTimestampMap.entrySet().stream()
+                .filter(activation -> now - activation.getValue() > delta)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList())
+                .forEach(this::release);
     }
 
     /**
@@ -249,6 +272,7 @@ public class Invoker {
      */
     public void removeAllContainers() {
         activationContainerMap.clear();
+        activationTimestampMap.clear();
         actionContainerMap.clear();
         memory = userMemory;
     }
@@ -273,6 +297,7 @@ public class Invoker {
                 ", userMemory=" + userMemory +
                 ", actionContainerMap=" + actionContainerMap +
                 ", activationContainerMap=" + activationContainerMap +
+                ", activationTimestampMap=" + activationTimestampMap +
                 ", memory=" + memory +
                 ", state=" + state +
                 ", update=" + timestamp +
