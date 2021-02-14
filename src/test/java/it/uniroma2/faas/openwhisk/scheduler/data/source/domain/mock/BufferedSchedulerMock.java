@@ -2,6 +2,9 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
@@ -24,9 +27,6 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.HealthKafkaConsumerMock.HEALTH_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
 import static java.util.stream.Collectors.*;
 
@@ -114,7 +114,7 @@ public class BufferedSchedulerMock extends Scheduler {
         // check if some invoker turned unhealthy or offline
         healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
 
-        if (stream.equals(ACTIVATION_STREAM)) {
+        if (stream.equals(ActivationKafkaConsumer.ACTIVATION_STREAM)) {
             final Collection<IBufferizable> bufferizables = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
@@ -124,7 +124,14 @@ public class BufferedSchedulerMock extends Scheduler {
 
             if (bufferizables.size() > 0) {
                 // invocation queue
-                final Queue<IBufferizable> invocationQueue;
+                // add all invoker test action activations without acquiring any resource
+                // invoker health test action must always be processed, otherwise
+                //   Apache OpenWhisk Controller component will mark invoker target as unavailable
+                final Queue<IBufferizable> invocationQueue = bufferizables.stream()
+                        .filter(b -> isInvokerHealthTestAction(b.getAction()))
+                        .collect(toCollection(ArrayDeque::new));
+                // remove invoker test action from input queue to be processed, if any
+                if (!invocationQueue.isEmpty()) bufferizables.removeAll(invocationQueue);
                 synchronized (mutex) {
                     // release activations too old, assuming there was an error sending completion
                     // check performed in this branch to reduce its frequency
@@ -137,13 +144,13 @@ public class BufferedSchedulerMock extends Scheduler {
                     buffering(bufferizables);
                     // remove from buffer all activations that can be processed on invokers
                     //   (so, invoker has sufficient resources to process the activations)
-                    invocationQueue = new ArrayDeque<>(pollAndAcquireResourcesForAllFlattened(
+                    invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
                             new ArrayList<>(invokersMap.keySet())));
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
             }
-        } else if (stream.equals(COMPLETION_STREAM)) {
+        } else if (stream.equals(CompletionKafkaConsumer.COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
                     .map(Completion.class::cast)
@@ -195,7 +202,7 @@ public class BufferedSchedulerMock extends Scheduler {
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
             }
-        } else if (stream.equals(HEALTH_STREAM)) {
+        } else if (stream.equals(HealthKafkaConsumer.HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
             final Collection<? extends Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
@@ -373,31 +380,21 @@ public class BufferedSchedulerMock extends Scheduler {
                 while (bufferIterator.hasNext()) {
                     final IBufferizable activation = bufferIterator.next();
 
-                    // invoker health test action must always be processed, if in buffer, otherwise
-                    //   Apache OpenWhisk Controller component will mark invoker unavailable
-                    if (isInvokerHealthTestAction(activation.getAction())) {
-                        // add to invocation queue
-                        // the invocation order is not much important as all activation inserted
-                        //   should be sent by producer
-                        invocationQueue.add(activation);
-                        // remove from original buffer but NOT acquire resources
-                        bufferIterator.remove();
-                        continue;
-                    }
+                    // if count of activations to select have been reached, break iteration
+                    if (count <= 0) break;
+                    // checks if current buffered activation can be submitted
+                    // note that it is not sufficient break iteration if can not be acquired
+                    //   memory and concurrency on current activation because it is possible that
+                    //   there is another activation in the buffered queue with requirements
+                    //   to be scheduled on current invoker
+                    if (!invoker.tryAcquireMemoryAndConcurrency(activation)) continue;
 
-                    // select at most count activations from buffer
-                    if (count > 0) {
-                        // checks if at least one of buffered activations can be submitted
-                        // note that it is not sufficient break iteration if can not be acquired
-                        //   memory and concurrency on current activation because it is possible that
-                        //   there is another activation in the buffered queue with requirements
-                        //   to be scheduled on current invoker
-                        if (invoker.tryAcquireMemoryAndConcurrency(activation)) {
-                            invocationQueue.add(activation);
-                            bufferIterator.remove();
-                            --count;
-                        }
-                    }
+                    // add to invocation queue
+                    invocationQueue.add(activation);
+                    // remove from buffer
+                    bufferIterator.remove();
+                    // reduce activations numbers to send
+                    --count;
                 }
                 // if there is at least one activation which fulfill requirements, add to map
                 // adding empty queue to indicate that, on current invoker,
