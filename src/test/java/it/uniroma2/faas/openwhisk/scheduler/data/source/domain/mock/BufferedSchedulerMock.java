@@ -2,9 +2,6 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
@@ -12,6 +9,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferiz
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.logging.log4j.LogManager;
@@ -27,6 +25,9 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.HealthKafkaConsumerMock.HEALTH_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
 import static java.util.stream.Collectors.*;
 
@@ -38,7 +39,7 @@ public class BufferedSchedulerMock extends Scheduler {
     public static final int THREAD_COUNT = 2;
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
-//    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
+    // public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
     public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toMillis(40);
     public static final int MAX_BUFFER_SIZE = 80;
 
@@ -51,7 +52,8 @@ public class BufferedSchedulerMock extends Scheduler {
     private long runningActivationTimeLimitMs = RUNNING_ACTIVATION_TIME_LIMIT_MS;
     // per invoker max queue size
     protected int maxBufferSize = MAX_BUFFER_SIZE;
-    private final SchedulerExecutors executors = new SchedulerExecutors(THREAD_COUNT, 0);
+    private final SchedulerExecutors schedulerExecutors = new SchedulerExecutors(THREAD_COUNT, 0);
+    private final SchedulerPeriodicExecutors schedulerPeriodicExecutors = new SchedulerPeriodicExecutors(0, THREAD_COUNT);
     private final Object mutex = new Object();
     // <targetInvoker, Invoker>
     // invoker's kafka topic name used as unique id for invoker
@@ -87,6 +89,9 @@ public class BufferedSchedulerMock extends Scheduler {
 
         this.policy = policy;
         this.producer = producer;
+
+        // scheduler periodic activities
+        schedulePeriodicActivities();
     }
 
     @Override
@@ -111,10 +116,7 @@ public class BufferedSchedulerMock extends Scheduler {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
-        // check if some invoker turned unhealthy or offline
-        healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs);
-
-        if (stream.equals(ActivationKafkaConsumer.ACTIVATION_STREAM)) {
+        if (stream.equals(ACTIVATION_STREAM)) {
             final Collection<IBufferizable> bufferizables = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
@@ -131,26 +133,25 @@ public class BufferedSchedulerMock extends Scheduler {
                         .filter(b -> isInvokerHealthTestAction(b.getAction()))
                         .collect(toCollection(ArrayDeque::new));
                 // remove invoker test action from input queue to be processed, if any
-                if (!invocationQueue.isEmpty()) bufferizables.removeAll(invocationQueue);
-                synchronized (mutex) {
-                    // release activations too old, assuming there was an error sending completion
-                    // check performed in this branch to reduce its frequency
-                    //   (should not be performed in completion branch in case completion
-                    //   Kafka consumers fail)
-                    releaseActivationsOlderThan(runningActivationTimeLimitMs);
-
-                    // insert all received elements in the buffer,
-                    //   reorder the buffer using selected policy
-                    buffering(bufferizables);
-                    // remove from buffer all activations that can be processed on invokers
-                    //   (so, invoker has sufficient resources to process the activations)
-                    invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
-                            new ArrayList<>(invokersMap.keySet())));
+                if (!invocationQueue.isEmpty()) {
+                    bufferizables.removeAll(invocationQueue);
+                    LOG.trace("Received {} invokerHealthTestAction.", invocationQueue.size());
+                }
+                if (!bufferizables.isEmpty()) {
+                    synchronized (mutex) {
+                        // insert all received elements in the buffer,
+                        //   reorder the buffer using selected policy
+                        buffering(bufferizables);
+                        // remove from buffer all activations that can be processed on invokers
+                        //   (so, invoker has sufficient resources to process the activations)
+                        invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
+                                new ArrayList<>(invokersMap.keySet())));
+                    }
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
             }
-        } else if (stream.equals(CompletionKafkaConsumer.COMPLETION_STREAM)) {
+        } else if (stream.equals(COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
                     .map(Completion.class::cast)
@@ -202,7 +203,7 @@ public class BufferedSchedulerMock extends Scheduler {
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
             }
-        } else if (stream.equals(HealthKafkaConsumer.HEALTH_STREAM)) {
+        } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
             final Collection<? extends Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
@@ -230,10 +231,13 @@ public class BufferedSchedulerMock extends Scheduler {
                             // register new invoker
                             invokersMap.put(invokerTarget, newInvoker);
                             invoker = newInvoker;
+                            LOG.trace("New invoker registered in the system: {}.", invokerTarget);
                             // create new completion Kafka consumer
                             // assign its value to null to create it later (in health checking phase)
-                            invokerCompletionConsumerMap.putIfAbsent(invokerTarget, null);
-                            LOG.trace("New invoker registered in the system: {}.", invokerTarget);
+                            if (!invokerCompletionConsumerMap.containsKey(invokerTarget)) {
+                                invokerCompletionConsumerMap.put(invokerTarget,
+                                        createCompletionConsumerFrom(getInstanceFromInvokerTarget(invokerTarget)));
+                            }
                         }
 
                         // if invoker was already healthy, update its timestamp
@@ -256,7 +260,6 @@ public class BufferedSchedulerMock extends Scheduler {
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
-                checkIfCreateCompletionKafkaConsumers();
             }
         } else {
             LOG.trace("Unable to manage data from stream {}.", stream.toString());
@@ -269,7 +272,7 @@ public class BufferedSchedulerMock extends Scheduler {
             LOG.trace("Closing {} completion kafka consumers.", invokerCompletionConsumerMap.size());
             invokerCompletionConsumerMap.values().forEach(CompletionKafkaConsumerMock::close);
         }
-        executors.shutdown();
+        schedulerExecutors.shutdown();
         LOG.trace("{} shutdown.", this.getClass().getSimpleName());
     }
 
@@ -446,6 +449,7 @@ public class BufferedSchedulerMock extends Scheduler {
         checkArgument(healthCheck < offlineCheck,
                 "Offline check time must be > of health check time.");
         long now = Instant.now().toEpochMilli();
+        if (invokersMap.isEmpty()) return;
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
                 // if invoker has not sent hearth-beat in delta, mark it as offline
@@ -526,8 +530,29 @@ public class BufferedSchedulerMock extends Scheduler {
         );
         register(List.of(completionKafkaConsumer));
         completionKafkaConsumer.register(List.of(this));
-        Objects.requireNonNull(executors.networkIO()).submit(completionKafkaConsumer);
+        Objects.requireNonNull(schedulerExecutors.networkIO()).submit(completionKafkaConsumer);
         return completionKafkaConsumer;
+    }
+
+    private void schedulePeriodicActivities() {
+        // release activations too old, assuming there was an error sending completion
+        // check performed in this branch to reduce its frequency
+        //   (should not be performed in completion branch in case completion
+        //   Kafka consumers fail)
+        Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
+                () -> releaseActivationsOlderThan(runningActivationTimeLimitMs),
+                0L,
+                TimeUnit.MINUTES.toMillis(runningActivationTimeLimitMs),
+                TimeUnit.MILLISECONDS
+        );
+
+        // check if some invoker turned unhealthy or offline
+        Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
+                () -> healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs),
+                0L,
+                TimeUnit.MINUTES.toMillis(healthCheckTimeLimitMs),
+                TimeUnit.MILLISECONDS
+        );
     }
 
     public static @Nonnull String getInvokerTargetFrom(@Nonnull Instance instance) {
@@ -565,32 +590,16 @@ public class BufferedSchedulerMock extends Scheduler {
         return healthCheckTimeLimitMs;
     }
 
-    public void setHealthCheckTimeLimitMs(long healthCheckTimeLimitMs) {
-        this.healthCheckTimeLimitMs = healthCheckTimeLimitMs;
-    }
-
     public long getOfflineTimeLimitMs() {
         return offlineTimeLimitMs;
-    }
-
-    public void setOfflineTimeLimitMs(long offlineTimeLimitMs) {
-        this.offlineTimeLimitMs = offlineTimeLimitMs;
     }
 
     public long getRunningActivationTimeLimitMs() {
         return runningActivationTimeLimitMs;
     }
 
-    public void setRunningActivationTimeLimitMs(long runningActivationTimeLimitMs) {
-        this.runningActivationTimeLimitMs = runningActivationTimeLimitMs;
-    }
-
     public int getMaxBufferSize() {
         return maxBufferSize;
-    }
-
-    public void setMaxBufferSize(int maxBufferSize) {
-        this.maxBufferSize = maxBufferSize;
     }
 
 }

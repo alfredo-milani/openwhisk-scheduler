@@ -29,8 +29,8 @@ class PriorityQueueFIFOPolicy implements IPolicy {
         for (ISchedulable schedulable : schedulables) {
             Integer priority = schedulable.getPriority();
             if (priority == null) {
-                LOG.warn("Priority for schedulable with id {} is null; using default value (0).",
-                        schedulable.getActivationId());
+                LOG.warn("Priority for schedulable with id {} is null; using default value ({}).",
+                        schedulable.getActivationId(), DEFAULT_PRIORITY);
                 schedulable = schedulable.with(DEFAULT_PRIORITY);
                 priority = schedulable.getPriority();
             }
