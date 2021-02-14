@@ -121,7 +121,9 @@ public class Invoker {
             return tryAcquireConcurrency(bufferizable);
         }
 
-        // if memory is not available for new container, check if there is
+        // if container actions are removed on release phase instantly, the following code
+        //   is no more required
+        /*// if memory is not available for new container, check if there is
         //   at least one unused container, with concurrency level of 0
         final String containerToRemove = getFirstUnusedContainer(actionContainerMap);
         // if there is at least one (unique) container that can be removed, so do it
@@ -130,7 +132,7 @@ public class Invoker {
             this.memory += actionContainerMap.remove(containerToRemove).getMemoryLimit();
             // now retry acquire memory and concurrency
             return tryAcquireMemoryAndConcurrency(bufferizable);
-        }
+        }*/
 
         return false;
     }
@@ -141,9 +143,22 @@ public class Invoker {
         activationTimestampMap.remove(activationId);
         final ContainerAction containerAction = activationContainerMap.remove(activationId);
         if (containerAction != null) {
+            /*// leave one container with no concurrency if no resources are required
             final long containersCountBeforeRelease = containerAction.getContainersCount();
             containerAction.release();
             final long containersReleased = containersCountBeforeRelease - containerAction.getContainersCount();
+            if (containersReleased > 0) {
+                memory += containersReleased * containerAction.getMemoryLimit();
+            }*/
+
+            // release and remove container action instantly to free resources
+            final long containersCountBeforeRelease = containerAction.getContainersCount();
+            containerAction.release();
+            long containersReleased = containersCountBeforeRelease - containerAction.getContainersCount();
+            if (containerAction.getConcurrency() == 0 && containerAction.getContainersCount() == 1) {
+                actionContainerMap.remove(containerAction.getActionId());
+                ++containersReleased;
+            }
             if (containersReleased > 0) {
                 memory += containersReleased * containerAction.getMemoryLimit();
             }
