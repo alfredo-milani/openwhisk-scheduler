@@ -114,7 +114,19 @@ public class Invoker {
                 : bufferizable.getMemoryLimit();
         // if memory is available, try acquiring concurrency resources
         if (this.memory - memory >= 0) {
-            createContainerFor(bufferizable, actionContainerMap);
+            // get action id from bufferizable
+            final String actionId = getActionIdFrom(bufferizable);
+            // retrieve action container from state map
+            final ContainerAction containerAction = actionContainerMap.get(actionId);
+            // if there is not yet a action container with this actionId, create new one,
+            //   acquire concurrency on it and insert in the state map
+            if (containerAction == null) {
+                actionContainerMap.put(actionId, ContainerAction.from(bufferizable));
+                // if there is already a container with that actionId, create new container with the same
+                //   actionId, and try acquire concurrency
+            } else {
+                containerAction.createContainer();
+            }
             // decrease memory capacity caused by new container creation
             this.memory -= memory;
             // acquire concurrency on newly created action container
@@ -173,33 +185,6 @@ public class Invoker {
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList())
                 .forEach(this::release);
-    }
-
-    /**
-     * Create new {@link ContainerAction} from specified {@link IBufferizable} and add it to
-     * specified map.
-     *
-     * @param bufferizable from which create new {@link ContainerAction}.
-     * @param containerActionMap to create.
-     */
-    private void createContainerFor(@Nonnull IBufferizable bufferizable,
-                                    @Nonnull Map<String, ContainerAction> containerActionMap) {
-        checkNotNull(bufferizable, "Bufferizable can not be null.");
-        checkNotNull(containerActionMap, "Container action map can not be null.");
-
-        // get action id from bufferizable
-        final String actionId = getActionIdFrom(bufferizable);
-        // retrieve action container from state map
-        final ContainerAction containerAction = containerActionMap.get(actionId);
-        // if there is not yet a action container with this actionId, create new one,
-        //   acquire concurrency on it and insert in the state map
-        if (containerAction == null) {
-            containerActionMap.put(actionId, ContainerAction.from(bufferizable));
-            // if there is already a container with that actionId, create new container with the same
-            //   actionId, and try acquire concurrency
-        } else {
-            containerAction.createContainer();
-        }
     }
 
     /**

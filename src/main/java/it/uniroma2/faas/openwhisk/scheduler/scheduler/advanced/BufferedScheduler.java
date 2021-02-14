@@ -15,6 +15,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -116,7 +117,7 @@ public class BufferedScheduler extends Scheduler {
             final Collection<IBufferizable> bufferizables = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
-                    .collect(Collectors.toCollection(ArrayDeque::new));
+                    .collect(toCollection(ArrayDeque::new));
             LOG.trace("[ACT] - Processing {} bufferizables objects (over {} received).",
                     bufferizables.size(), data.size());
 
@@ -126,6 +127,8 @@ public class BufferedScheduler extends Scheduler {
                 synchronized (mutex) {
                     // release activations too old, assuming there was an error sending completion
                     // check performed in this branch to reduce its frequency
+                    //   (should not be performed in completion branch in case completion
+                    //   Kafka consumers fail)
                     releaseActivationsOlderThan(runningActivationTimeLimitMs);
 
                     // insert all received elements in the buffer,
@@ -278,8 +281,11 @@ public class BufferedScheduler extends Scheduler {
         checkNotNull(bufferizables, "Input collection can not be null.");
         if (bufferizables.isEmpty()) return;
         synchronized (mutex) {
-            invokerBufferMap.putIfAbsent(invoker, new ArrayDeque<>());
             Queue<IBufferizable> buffer = invokerBufferMap.get(invoker);
+            if (buffer == null) {
+                buffer = new ArrayDeque<>();
+                invokerBufferMap.put(invoker, buffer);
+            }
 
             // remove old activations if buffer exceed its max size
             final int total = buffer.size() + bufferizables.size();
@@ -360,19 +366,37 @@ public class BufferedScheduler extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 // using iterator to remove activation from source buffer if condition is met
+                // all invoker health test actions are inserted in the invocation queue and removed from buffer
+                //   without consuming resources
                 final Iterator<IBufferizable> bufferIterator = buffer.iterator();
                 while (bufferIterator.hasNext()) {
                     final IBufferizable activation = bufferIterator.next();
-                    // checks if at least one of buffered activations can be submitted
-                    // note that it is not sufficient break iteration if can not be acquired
-                    //   memory and concurrency on current activation because it is possible that
-                    //   there is another activation in the buffered queue with requirements
-                    //   to be scheduled on current invoker
-                    if (count <= 0 || !invoker.tryAcquireMemoryAndConcurrency(activation))
+
+                    // invoker health test action must always be processed, if in buffer, otherwise
+                    //   Apache OpenWhisk Controller component will mark invoker unavailable
+                    if (isInvokerHealthTestAction(activation.getAction())) {
+                        // add to invocation queue
+                        // the invocation order is not much important as all activation inserted
+                        //   should be sent by producer
+                        invocationQueue.add(activation);
+                        // remove from original buffer but NOT acquire resources
+                        bufferIterator.remove();
                         continue;
-                    invocationQueue.add(activation);
-                    bufferIterator.remove();
-                    --count;
+                    }
+
+                    // select at most count activations from buffer
+                    if (count > 0) {
+                        // checks if at least one of buffered activations can be submitted
+                        // note that it is not sufficient break iteration if can not be acquired
+                        //   memory and concurrency on current activation because it is possible that
+                        //   there is another activation in the buffered queue with requirements
+                        //   to be scheduled on current invoker
+                        if (invoker.tryAcquireMemoryAndConcurrency(activation)) {
+                            invocationQueue.add(activation);
+                            bufferIterator.remove();
+                            --count;
+                        }
+                    }
                 }
                 // if there is at least one activation which fulfill requirements, add to map
                 // adding empty queue to indicate that, on current invoker,
@@ -516,6 +540,12 @@ public class BufferedScheduler extends Scheduler {
     public static int getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
         checkNotNull(invokerTarget, "Invoker target can not be null.");
         return Integer.parseInt(invokerTarget.replace("invoker", ""));
+    }
+
+    public static boolean isInvokerHealthTestAction(@Nullable Action action) {
+        if (action == null) return false;
+        return action.getPath().equals("whisk.system") &&
+                action.getName().matches("^invokerHealthTestAction[0-9]+$");
     }
 
     /**

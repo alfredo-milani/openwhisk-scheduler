@@ -68,7 +68,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
         }
         final Collection<Completion> data = new ArrayDeque<>(10);
 
-        if (!completionQueue.isEmpty()) {
+        /*if (!completionQueue.isEmpty()) {
             String completion = completionQueue.poll();
             try {
                 data.add(objectMapper.readValue(completion, NonBlockingCompletion.class));
@@ -83,9 +83,9 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
                     }
                 }
             }
-        }
+        }*/
 
-        /*for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i) {
             try {
                 Completion completion = objectMapper.readValue(String.format(completionNonBlocking), NonBlockingCompletion.class);
                 data.add(completion);
@@ -111,7 +111,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
-        }*/
+        }
 
         LOG.trace("Sending {} consumable to observers.", data.size());
         return data;
