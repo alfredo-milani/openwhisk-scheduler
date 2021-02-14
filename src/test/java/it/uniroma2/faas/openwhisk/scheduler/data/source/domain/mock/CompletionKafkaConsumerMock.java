@@ -49,6 +49,12 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     private final String completionNonBlocking = "{\"activationId\":\"811bd520fa794dbe9bd520fa793dbef3\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"MSCztINkcSGlhgeQT6H7YJAPaDVNO0nK\",1612935312054]}";
     private final String completionFailure = "{\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":true,\"response\":\"9376ac0a2ed848abb6ac0a2ed818ab0b\",\"transid\":[\"VqtARfumgJ3EcWpjjUHRm8zGytUKseup\",1613235607414]}";
 
+    private final Queue<String> completionQueue = new ArrayDeque<>(3) {{
+        add("{\"activationId\":\"746e9b27a7bb4382ae9b27a7bb6382ec\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"sid_invokerHealth\",1613291769810]}");
+        add("{\"activationId\":\"766a4164fb8c4560aa4164fb8c556017\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"sid_invokerHealth\",1613291769810]}");
+        add("{\"activationId\":\"eecaac7f2d2b4b428aac7f2d2bcb429f\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"HCKGoiAtQEsBdp2C7mjWWOAdtWBr1HrS\",1613292060448]}");
+    }};
+
     /**
      * It is assumed that only one thread per instance calls this method.
      * @return
@@ -56,13 +62,30 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     @Override
     public @Nullable Collection<Completion> consume() {
         try {
-            TimeUnit.SECONDS.sleep(15);
+            TimeUnit.SECONDS.sleep(4);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-
         final Collection<Completion> data = new ArrayDeque<>(10);
-        for (int i = 0; i < 2; ++i) {
+
+        if (!completionQueue.isEmpty()) {
+            String completion = completionQueue.poll();
+            try {
+                data.add(objectMapper.readValue(completion, NonBlockingCompletion.class));
+            } catch (JsonProcessingException e0) {
+                try {
+                    data.add(objectMapper.readValue(completion, BlockingCompletion.class));
+                } catch (JsonProcessingException e1) {
+                    try {
+                        data.add(objectMapper.readValue(completion, FailureCompletion.class));
+                    } catch (JsonProcessingException e2) {
+                        LOG.warn("Exception parsing Activation from record {}.", completion);
+                    }
+                }
+            }
+        }
+
+        /*for (int i = 0; i < 2; ++i) {
             try {
                 Completion completion = objectMapper.readValue(String.format(completionNonBlocking), NonBlockingCompletion.class);
                 data.add(completion);
@@ -88,7 +111,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
-        }
+        }*/
 
         LOG.trace("Sending {} consumable to observers.", data.size());
         return data;
