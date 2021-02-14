@@ -71,7 +71,7 @@ controller:
 scheduler:
   external: false
   imageName: "ow-scheduler"
-  imageTag: "0.0.13"
+  imageTag: "0.0.14"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"

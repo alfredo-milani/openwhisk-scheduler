@@ -174,6 +174,8 @@ public class BufferedScheduler extends Scheduler {
                         if (invoker == null) continue;
                         // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
+                        LOG.trace("Released resources on invoker {} - remaining memory {} MiB.",
+                                invoker.getInvokerName(), invoker.getMemory());
 
                         // if invoker target is healthy, insert max completionsCount of activations
                         //   that could be scheduled on it
@@ -373,7 +375,7 @@ public class BufferedScheduler extends Scheduler {
                     invocationQueue.add(activation);
                     bufferIterator.remove();
                     --count;
-                    LOG.trace("Acquired resources on invoker {} - remaining memory {}.",
+                    LOG.trace("Acquired resources on invoker {} - remaining memory {} MiB.",
                             invoker.getInvokerName(), invoker.getMemory());
                 }
                 // if there is at least one activation which fulfill requirements, add to map
