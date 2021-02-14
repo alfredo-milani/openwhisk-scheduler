@@ -38,7 +38,7 @@ public class BufferedSchedulerMock extends Scheduler {
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
 //    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
-public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toMillis(40);
+    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toMillis(40);
     public static final int MAX_BUFFER_SIZE = 80;
 
     // time after which an invoker is marked as unhealthy
@@ -175,8 +175,6 @@ public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toM
                         if (invoker == null) continue;
                         // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
-                        LOG.trace("Released resources on invoker {} - remaining memory {} MiB.",
-                                invoker.getInvokerName(), invoker.getMemory());
 
                         // if invoker target is healthy, insert max completionsCount of activations
                         //   that could be scheduled on it
@@ -376,8 +374,6 @@ public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toM
                     invocationQueue.add(activation);
                     bufferIterator.remove();
                     --count;
-                    LOG.trace("Acquired resources on invoker {} - remaining memory {} MiB.",
-                            invoker.getInvokerName(), invoker.getMemory());
                 }
                 // if there is at least one activation which fulfill requirements, add to map
                 // adding empty queue to indicate that, on current invoker,
@@ -397,8 +393,13 @@ public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toM
                     }
                 })
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        LOG.trace("Scheduling: {}.", invokerQueueTrace);
-        LOG.trace("Actual buffer - {}.", invokerBufferMap.entrySet().stream()
+        final Map<String, String> invokerMemoryTrace = invokersMap.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleEntry<>(
+                        entry.getKey(), entry.getValue().getMemory() + " MiB remaining"))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        LOG.trace("Scheduling - {}.", invokerQueueTrace);
+        LOG.trace("Memory - {}.", invokerMemoryTrace);
+        LOG.trace("Buffer - {}.", invokerBufferMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
         return invokerBufferizableMap;
     }
@@ -462,17 +463,21 @@ public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.SECONDS.toM
      */
     private void releaseActivationsOlderThan(long delta) {
         checkArgument(delta >= 0, "Delta time must be >= 0.");
+        final Map<String, Long> invokerOldActivationsMapTrace = new HashMap<>();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
                 final long activationsBefore = invoker.getActivationsCount();
                 invoker.releaseAllOldThan(delta);
                 final long activationsAfter = invoker.getActivationsCount();
                 if (activationsAfter < activationsBefore) {
-                    LOG.trace("Removed {} old activations from invoker {} (time delta: {} ms).",
-                            activationsBefore - activationsAfter, invoker.getInvokerName(), delta);
+                    invokerOldActivationsMapTrace.put(invoker.getInvokerName(),
+                            activationsBefore - activationsAfter);
                 }
             }
         }
+        if (!invokerOldActivationsMapTrace.isEmpty())
+            LOG.trace("Removed old activations from invokers (time delta - {} ms) - {}.",
+                    delta, invokerOldActivationsMapTrace);
     }
 
     private void checkIfCreateCompletionKafkaConsumers() {
