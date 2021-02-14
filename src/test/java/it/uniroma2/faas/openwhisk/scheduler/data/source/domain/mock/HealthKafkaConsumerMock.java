@@ -59,10 +59,13 @@ public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
             e.printStackTrace();
         }
         final Collection<Health> data = new ArrayDeque<>(10);
+
+        if (random.nextBoolean()) return null;
+
         for (int i = 0; i < 1; ++i) {
             try {
-                // int invoker = random.ints(0, 3).findFirst().getAsInt();
-                int invoker = 0;
+                 int invoker = random.ints(0, 3).findFirst().getAsInt();
+//                int invoker = 0;
                 Health activation = objectMapper.readValue(String.format(
                         recordHealth,
                         invoker,

@@ -272,6 +272,7 @@ public class BufferedScheduler extends Scheduler {
             invokerCompletionConsumerMap.values().forEach(CompletionKafkaConsumer::close);
         }
         schedulerExecutors.shutdown();
+        schedulerPeriodicExecutors.shutdown();
         LOG.trace("{} shutdown.", this.getClass().getSimpleName());
     }
 
@@ -541,7 +542,7 @@ public class BufferedScheduler extends Scheduler {
         Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
                 () -> releaseActivationsOlderThan(runningActivationTimeLimitMs),
                 0L,
-                TimeUnit.MINUTES.toMillis(runningActivationTimeLimitMs),
+                runningActivationTimeLimitMs,
                 TimeUnit.MILLISECONDS
         );
 
@@ -549,7 +550,7 @@ public class BufferedScheduler extends Scheduler {
         Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
                 () -> healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs),
                 0L,
-                TimeUnit.MINUTES.toMillis(healthCheckTimeLimitMs),
+                healthCheckTimeLimitMs,
                 TimeUnit.MILLISECONDS
         );
     }

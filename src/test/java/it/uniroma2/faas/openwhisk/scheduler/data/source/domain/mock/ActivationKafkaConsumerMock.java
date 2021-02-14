@@ -107,7 +107,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
             e.printStackTrace();
         }*/
 
-        for (int i = 0; i < 15; ++i) {
+        for (int i = 0; i < 1; ++i) {
             try {
                 Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),

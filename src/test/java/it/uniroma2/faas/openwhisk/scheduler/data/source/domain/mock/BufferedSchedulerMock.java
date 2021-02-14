@@ -273,6 +273,7 @@ public class BufferedSchedulerMock extends Scheduler {
             invokerCompletionConsumerMap.values().forEach(CompletionKafkaConsumerMock::close);
         }
         schedulerExecutors.shutdown();
+        schedulerPeriodicExecutors.shutdown();
         LOG.trace("{} shutdown.", this.getClass().getSimpleName());
     }
 
@@ -542,7 +543,7 @@ public class BufferedSchedulerMock extends Scheduler {
         Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
                 () -> releaseActivationsOlderThan(runningActivationTimeLimitMs),
                 0L,
-                TimeUnit.MINUTES.toMillis(runningActivationTimeLimitMs),
+                runningActivationTimeLimitMs,
                 TimeUnit.MILLISECONDS
         );
 
@@ -550,7 +551,7 @@ public class BufferedSchedulerMock extends Scheduler {
         Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
                 () -> healthCheck(healthCheckTimeLimitMs, offlineTimeLimitMs),
                 0L,
-                TimeUnit.MINUTES.toMillis(healthCheckTimeLimitMs),
+                healthCheckTimeLimitMs,
                 TimeUnit.MILLISECONDS
         );
     }
