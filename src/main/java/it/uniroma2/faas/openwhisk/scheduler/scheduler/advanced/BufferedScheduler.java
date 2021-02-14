@@ -18,6 +18,7 @@ import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -26,8 +27,7 @@ import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.k
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer.COMPLETION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer.HEALTH_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toCollection;
+import static java.util.stream.Collectors.*;
 
 public class BufferedScheduler extends Scheduler {
 
@@ -37,7 +37,7 @@ public class BufferedScheduler extends Scheduler {
     public static final int THREAD_COUNT = 2;
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
-    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(10);
+    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
     public static final int MAX_BUFFER_SIZE = 500;
 
     // time after which an invoker is marked as unhealthy
@@ -138,8 +138,6 @@ public class BufferedScheduler extends Scheduler {
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
-                else LOG.trace("Not enough resources or unhealthy invokers - {}.",
-                        invokersMap.keySet());
             }
         } else if (stream.equals(COMPLETION_STREAM)) {
             final Collection<? extends Completion> completions = data.stream()
@@ -192,8 +190,6 @@ public class BufferedScheduler extends Scheduler {
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
-                else LOG.trace("Not enough resources or unhealthy invokers - {}.",
-                        invokersMap.keySet());
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
@@ -249,8 +245,6 @@ public class BufferedScheduler extends Scheduler {
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
-                else LOG.trace("Not enough resources or unhealthy invokers - {}.",
-                        invokersMap.keySet());
                 checkIfCreateCompletionKafkaConsumers();
             }
         } else {
@@ -317,12 +311,17 @@ public class BufferedScheduler extends Scheduler {
         for (final String invoker : invokers) {
             invokerCountMap.put(invoker, Integer.MAX_VALUE);
         }
-        return pollAndAcquireAtMostResourcesForAll(invokerCountMap);
+        return pollAndAcquireAtMostResourcesForAll(invokerCountMap).entrySet().stream()
+                .filter(entry -> entry.getValue() != null)
+                .filter(entry -> !entry.getValue().isEmpty())
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private @Nonnull Queue<IBufferizable> pollAndAcquireAtMostResourcesForAllFlattened(@Nonnull Map<String, Integer> invokers) {
         final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireAtMostResourcesForAll(invokers);
         return invokerQueueMap.values().stream()
+                .filter(Objects::nonNull)
+                .filter(Predicate.not(Collection::isEmpty))
                 .flatMap(Queue::stream)
                 .collect(Collectors.toCollection(ArrayDeque::new));
     }
@@ -344,7 +343,11 @@ public class BufferedScheduler extends Scheduler {
                 //   they should be submitted
                 final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
                 // if there are no buffered activations for current invoker, check next
-                if (buffer == null || buffer.isEmpty()) continue;
+                if (buffer == null || buffer.isEmpty()) {
+                    // null queue to indicate that buffer is empty
+                    invokerBufferizableMap.put(invokerTarget, null);
+                    continue;
+                }
 
                 // for all completions processed by current invoker, submit all buffered activations
                 //   for which invoker has sufficient resources
@@ -374,15 +377,24 @@ public class BufferedScheduler extends Scheduler {
                             invoker.getInvokerName(), invoker.getMemory());
                 }
                 // if there is at least one activation which fulfill requirements, add to map
-                if (invocationQueue.size() > 0) invokerBufferizableMap.put(invokerTarget, invocationQueue);
+                // adding empty queue to indicate that, on current invoker,
+                //   there are not available resources
+                invokerBufferizableMap.put(invokerTarget, invocationQueue);
             }
         }
-        if (invokerBufferizableMap.keySet().size() < invokers.keySet().size()) {
-            final Set<String> invokersKeyCopy = new HashSet<>(invokers.keySet());
-            invokersKeyCopy.removeAll(invokerBufferizableMap.keySet());
-            LOG.trace("No resources scheduled on {} - empty buffer or not enough resources.",
-                    invokersKeyCopy);
-        }
+        final Map<String, String> invokerQueueTrace = invokerBufferizableMap.entrySet().stream()
+                .map(entry -> {
+                    if (entry.getValue() == null) {
+                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "empty buffer");
+                    } else if (entry.getValue().isEmpty()) {
+                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "not enough resources");
+                    } else {
+                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
+                                String.format("%s activations", entry.getValue().size()));
+                    }
+                })
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        LOG.trace("Scheduling: {}.", invokerQueueTrace);
         LOG.trace("Actual buffer - {}.", invokerBufferMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
         return invokerBufferizableMap;
@@ -390,6 +402,7 @@ public class BufferedScheduler extends Scheduler {
 
     private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Schedulables to send can not be null.");
+        final long schedulingTermination = Instant.now().toEpochMilli();
         schedulables.forEach(schedulable -> {
             // if activation has not target invoker, abort its processing
             if (schedulable.getTargetInvoker() == null) {
@@ -398,7 +411,8 @@ public class BufferedScheduler extends Scheduler {
             } else {
                 LOG.trace("Writing activation with id {} (priority {}) in {} topic.",
                         schedulable.getActivationId(), schedulable.getPriority(), schedulable.getTargetInvoker());
-                producer.produce(schedulable.getTargetInvoker(), schedulable);
+                producer.produce(schedulable.getTargetInvoker(),
+                        Collections.singleton(schedulable.with(schedulingTermination)));
             }
         });
     }

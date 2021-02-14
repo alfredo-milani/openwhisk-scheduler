@@ -8,6 +8,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced.
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,211 +20,196 @@ import static com.google.common.base.Preconditions.checkArgument;
 public final class Activation implements ITraceable, IBufferizable {
 
     /*
-    {
-       "action":{
-          "name":"invokerHealthTestAction0",
-          "path":"whisk.system",
-          "version":"0.0.1"
-       },
-       "activationId":"f16f3319467741dfaf3319467741df55",
-       "blocking":false,
-       "initArgs":[
-
-       ],
-       "lockedArgs":{
-
-       },
-       "revision":null,
-       "rootControllerIndex":{
-          "asString":"0",
-          "instanceType":"controller"
-       },
-       "transid":[
-          "sid_invokerHealth",
-          1610726319878
-       ],
-       "user":{
-          "authkey":{
-             "api_key":"0e31a905-7de9-4345-b1a9-057de98345be:yvOm0CJajJEi82htxUXva5TKsZDcDsyZQRkV1GtawZNoHzN5ddQCI0VOldYyUuZZ"
-          },
-          "limits":{
-
-          },
-          "namespace":{
-             "name":"whisk.system",
-             "uuid":"0e31a905-7de9-4345-b1a9-057de98345be"
-          },
-          "rights":[
-
-          ],
-          "subject":"whisk.system"
-       }
-    }
-    */
-
-    /*
-    {
-       "action":{
-          "name":"test_annotations",
-          "path":"guest",
-          "version":"0.0.1"
-       },
-       "activationId":"0b307ee5a1304a57b07ee5a1300a57e7",
-       "blocking":true,
-       "content":{
-          "key0":"value0",
-          "key1":"value1",
-          "key2":"value2",
-          "$scheduler": {
-            "target":"invoker0",
-            "priority":0
-          }
-       },
-       "initArgs":[
-
-       ],
-       "revision":"3-b3eeb1e516fd89366574c6051f024fa7",
-       "rootControllerIndex":{
-          "asString":"0",
-          "instanceType":"controller"
-       },
-       "transid":[
-          "rxseFbQm3cy0QYASqVGkujB8lxEDE5Mu",
-          1609810319398
-       ],
-       "user":{
-          "authkey":{
-             "api_key":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
-          },
-          "limits":{
-
-          },
-          "namespace":{
-             "name":"guest",
-             "uuid":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
-          },
-          "rights":[
-             "READ",
-             "PUT",
-             "DELETE",
-             "ACTIVATE"
-          ],
-          "subject":"guest"
-       }
-    }
+     * {
+     *   "action": {
+     *     "name": "invokerHealthTestAction0",
+     *     "path": "whisk.system",
+     *     "version": "0.0.1"
+     *   },
+     *   "activationId": "f16f3319467741dfaf3319467741df55",
+     *   "blocking": false,
+     *   "initArgs": [],
+     *   "lockedArgs": {},
+     *   "revision": null,
+     *   "rootControllerIndex": {
+     *     "asString": "0",
+     *     "instanceType": "controller"
+     *   },
+     *   "transid": [
+     *     "sid_invokerHealth",
+     *     1610726319878
+     *   ],
+     *   "user": {
+     *     "authkey": {
+     *       "api_key": "0e31a905-7de9-4345-b1a9-057de98345be:yvOm0CJajJEi82htxUXva5TKsZDcDsyZQRkV1GtawZNoHzN5ddQCI0VOldYyUuZZ"
+     *     },
+     *     "limits": {},
+     *     "namespace": {
+     *       "name": "whisk.system",
+     *       "uuid": "0e31a905-7de9-4345-b1a9-057de98345be"
+     *     },
+     *     "rights": [],
+     *     "subject": "whisk.system"
+     *   }
+     * }
      */
 
     /*
-    {
-       "action":{
-          "name":"cmp",
-          "path":"guest",
-          "version":"0.0.2"
-       },
-       "activationId":"841e3f99f40346429e3f99f40396428f",
-       "blocking":true,
-       "cause":"7902f85843f349df82f85843f309dfb0",
-       "content":{
-          "sleep_time":15,
-          "user":"Kira"
-       },
-       "initArgs":[
-
-       ],
-       "revision":"2-ec8832836d2a16234f464c9445e34587",
-       "rootControllerIndex":{
-          "asString":"0",
-          "instanceType":"controller"
-       },
-       "transid":[
-          "2rkHZR02ErZB6kol4tl5LN4oxiHB5VH8",
-          1609870676410,
-          [
-             "iRFErOK5Hflz8qduy49vBKWWMFTG44IW",
-             1609870676273
-          ]
-       ],
-       "user":{
-          "authkey":{
-             "api_key":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
-          },
-          "limits":{
-
-          },
-          "namespace":{
-             "name":"guest",
-             "uuid":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
-          },
-          "rights":[
-             "READ",
-             "PUT",
-             "DELETE",
-             "ACTIVATE"
-          ],
-          "subject":"guest"
-       }
-    }
+     * {
+     *   "action": {
+     *     "name": "test_annotations",
+     *     "path": "guest",
+     *     "version": "0.0.1"
+     *   },
+     *   "activationId": "0b307ee5a1304a57b07ee5a1300a57e7",
+     *   "blocking": true,
+     *   "content": {
+     *     "key0": "value0",
+     *     "key1": "value1",
+     *     "key2": "value2",
+     *     "$scheduler": {
+     *       "target": "invoker0",
+     *       "priority": 0
+     *     }
+     *   },
+     *   "initArgs": [],
+     *   "revision": "3-b3eeb1e516fd89366574c6051f024fa7",
+     *   "rootControllerIndex": {
+     *     "asString": "0",
+     *     "instanceType": "controller"
+     *   },
+     *   "transid": [
+     *     "rxseFbQm3cy0QYASqVGkujB8lxEDE5Mu",
+     *     1609810319398
+     *   ],
+     *   "user": {
+     *     "authkey": {
+     *       "api_key": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
+     *     },
+     *     "limits": {},
+     *     "namespace": {
+     *       "name": "guest",
+     *       "uuid": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
+     *     },
+     *     "rights": [
+     *       "READ",
+     *       "PUT",
+     *       "DELETE",
+     *       "ACTIVATE"
+     *     ],
+     *     "subject": "guest"
+     *   }
+     * }
      */
 
     /*
-    {
-       "action":{
-          "name":"fn1",
-          "path":"guest",
-          "version":"0.0.2"
-       },
-       "activationId":"7408d52ef57d458788d52ef57d5587b4",
-       "blocking":true,
-       "cause":"7902f85843f349df82f85843f309dfb0",
-       "content":{
-          "sleep_time":15,
-          "user":"Kira"
-       },
-       "initArgs":[
+     * {
+     *        "action":{
+     *           "name":"cmp",
+     *           "path":"guest",
+     *           "version":"0.0.2"
+     *        },
+     *        "activationId":"841e3f99f40346429e3f99f40396428f",
+     *        "blocking":true,
+     *        "cause":"7902f85843f349df82f85843f309dfb0",
+     *        "content":{
+     *           "sleep_time":15,
+     *           "user":"Kira"
+     *        },
+     *        "initArgs":[
+     *
+     *        ],
+     *        "revision":"2-ec8832836d2a16234f464c9445e34587",
+     *        "rootControllerIndex":{
+     *           "asString":"0",
+     *           "instanceType":"controller"
+     *        },
+     *        "transid":[
+     *           "2rkHZR02ErZB6kol4tl5LN4oxiHB5VH8",
+     *           1609870676410,
+     *           [
+     *              "iRFErOK5Hflz8qduy49vBKWWMFTG44IW",
+     *              1609870676273
+     *           ]
+     *        ],
+     *        "user":{
+     *           "authkey":{
+     *              "api_key":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
+     *           },
+     *           "limits":{
+     *
+     *           },
+     *           "namespace":{
+     *              "name":"guest",
+     *              "uuid":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
+     *           },
+     *           "rights":[
+     *              "READ",
+     *              "PUT",
+     *              "DELETE",
+     *              "ACTIVATE"
+     *           ],
+     *           "subject":"guest"
+     *        }
+     *     }
+     */
 
-       ],
-       "revision":"2-2bd48aaaf6e1721bca963e680eee313e",
-       "rootControllerIndex":{
-          "asString":"0",
-          "instanceType":"controller"
-       },
-       "transid":[
-          "bxytKe9Qk3EYVEYQnpHs02NDFo5eKAd3",
-          1609870677855,
-          [
-             "2rkHZR02ErZB6kol4tl5LN4oxiHB5VH8",
-             1609870676410,
-             [
-                "iRFErOK5Hflz8qduy49vBKWWMFTG44IW",
-                1609870676273
-             ]
-          ]
-       ],
-       "user":{
-          "authkey":{
-             "api_key":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
-          },
-          "limits":{
-
-          },
-          "namespace":{
-             "name":"guest",
-             "uuid":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
-          },
-          "rights":[
-             "READ",
-             "PUT",
-             "DELETE",
-             "ACTIVATE"
-          ],
-          "subject":"guest"
-       }
-    }
+    /*
+     * {
+     *   "action": {
+     *     "name": "fn1",
+     *     "path": "guest",
+     *     "version": "0.0.2"
+     *   },
+     *   "activationId": "7408d52ef57d458788d52ef57d5587b4",
+     *   "blocking": true,
+     *   "cause": "7902f85843f349df82f85843f309dfb0",
+     *   "content": {
+     *     "sleep_time": 15,
+     *     "user": "Kira"
+     *   },
+     *   "initArgs": [],
+     *   "revision": "2-2bd48aaaf6e1721bca963e680eee313e",
+     *   "rootControllerIndex": {
+     *     "asString": "0",
+     *     "instanceType": "controller"
+     *   },
+     *   "transid": [
+     *     "bxytKe9Qk3EYVEYQnpHs02NDFo5eKAd3",
+     *     1609870677855,
+     *     [
+     *       "2rkHZR02ErZB6kol4tl5LN4oxiHB5VH8",
+     *       1609870676410,
+     *       [
+     *         "iRFErOK5Hflz8qduy49vBKWWMFTG44IW",
+     *         1609870676273
+     *       ]
+     *     ]
+     *   ],
+     *   "user": {
+     *     "authkey": {
+     *       "api_key": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP"
+     *     },
+     *     "limits": {},
+     *     "namespace": {
+     *       "name": "guest",
+     *       "uuid": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
+     *     },
+     *     "rights": [
+     *       "READ",
+     *       "PUT",
+     *       "DELETE",
+     *       "ACTIVATE"
+     *     ],
+     *     "subject": "guest"
+     *   }
+     * }
      */
 
     public static final String K_SCHEDULER = "$scheduler";
     public static final String K_SCHEDULER_TARGET = "target";
     public static final String K_SCHEDULER_PRIORITY = "priority";
+    public static final String K_SCHEDULER_DURATION = "duration";
     public static final String K_SCHEDULER_OVERLOAD = "overload";
     public static final String K_SCHEDULER_LIMITS = "limits";
     public static final String K_SCHEDULER_LIMITS_CONCURRENCY = "concurrency";
@@ -247,6 +233,9 @@ public final class Activation implements ITraceable, IBufferizable {
     private final String targetInvoker;
     // using Integer priority, there is not an upper bound to max priority
     private final Integer priority;
+    // scheduling duration
+    // at creation, contains creation timestamp
+    private final long creationTimestamp;
     // indicate invoker overloading
     private final Boolean overload;
     // limits for current activation
@@ -307,6 +296,7 @@ public final class Activation implements ITraceable, IBufferizable {
         }
         this.targetInvoker = targetInvoker;
         this.priority = priority;
+        this.creationTimestamp = Instant.now().toEpochMilli();
         this.overload = overload;
         this.concurrencyLimit = concurrencyLimit;
         this.memoryLimit = memoryLimit;
@@ -330,6 +320,33 @@ public final class Activation implements ITraceable, IBufferizable {
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
         Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
         scheduler.putIfAbsent(K_SCHEDULER_PRIORITY, priority);
+
+        return new Activation(
+                this.getAction(), this.getActivationId(),
+                this.isBlocking(), this.getCause(),
+                content, this.getInitArgs(),
+                this.getLockedArgs(), this.getRevision(),
+                this.getRootControllerIndex(), this.getTransId(),
+                this.getUser()
+        );
+    }
+
+    // TODO - implement deep copy
+    // Current implementation provides a shallow copy
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nonnull Activation with(long schedulingTermination) {
+        checkArgument(schedulingTermination >= 0, "Scheduling duration must be >= 0.");
+
+        Map<String, Object> content;
+        if (this.content == null) {
+            content = new HashMap<>();
+        } else {
+            content = new HashMap<>(this.content);
+        }
+        content.putIfAbsent(K_SCHEDULER, new HashMap<>());
+        Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
+        scheduler.putIfAbsent(K_SCHEDULER_DURATION, schedulingTermination - creationTimestamp);
 
         return new Activation(
                 this.getAction(), this.getActivationId(),

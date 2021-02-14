@@ -9,6 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -86,6 +87,7 @@ public class BaseScheduler extends Scheduler {
     private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Schedulables to send can not be null.");
 
+        final long schedulingTermination = Instant.now().toEpochMilli();
         ISchedulable schedulable = schedulables.poll();
         while (schedulable != null) {
             // if activation has not target invoker, abort its processing
@@ -95,7 +97,8 @@ public class BaseScheduler extends Scheduler {
             } else {
                 LOG.trace("Writing activation with id {} in {} topic.",
                         schedulable.getActivationId(), schedulable.getTargetInvoker());
-                producer.produce(schedulable.getTargetInvoker(), schedulable);
+                producer.produce(schedulable.getTargetInvoker(),
+                        Collections.singleton(schedulable.with(schedulingTermination)));
             }
             schedulable = schedulables.poll();
         }

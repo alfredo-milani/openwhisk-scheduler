@@ -40,8 +40,21 @@ public interface ISchedulable extends IConsumable {
      * Create new {@link ISchedulable} object with new provided priority level.
      *
      * @param newPriority new priority level selected for new {@link ISchedulable} object.
+     * @param <T> {@link ISchedulable} object.
      * @return new {@link ISchedulable} object with selected priority level.
      */
     @Nonnull <T extends ISchedulable> T with(int newPriority);
+
+    /**
+     * Create new {@link ISchedulable} object where in the content section
+     * there is a field which represent scheduling duration.
+     * Scheduling duration is computed as the difference between creation timestamp
+     * (generated when object is created) and schedulingDuration.
+     *
+     * @param schedulingDuration timestamp which represent the end of the scheduling phase.
+     * @param <T> {@link ISchedulable} object.
+     * @return {@link ISchedulable} object.
+     */
+    @Nonnull <T extends ISchedulable> T with(long schedulingDuration);
 
 }
