@@ -87,7 +87,7 @@ public class SchedulerComponentTest {
         final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
-        boolean tracerSchedulerOption = false;
+        boolean tracerSchedulerOption = true;
         boolean bufferedSchedulerOption = true;
         boolean healthScheckerSchedulerOption = false;
         if (bufferedSchedulerOption) {

@@ -194,7 +194,10 @@ public class BufferedScheduler extends Scheduler {
                         invoker.release(activationId);
                         // check if activation is effectively released
                         // activations that do not release resource are invokerHealthTestAction
-                        if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) continue;
+                        if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
+                            LOG.trace("Received 1 invokerHealthTestAction.");
+                            continue;
+                        }
 
                         // if invoker target is healthy, insert max completionsCount of activations
                         //   that could be scheduled on it

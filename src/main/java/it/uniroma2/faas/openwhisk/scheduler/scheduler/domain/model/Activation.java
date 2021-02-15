@@ -318,7 +318,7 @@ public final class Activation implements ITraceable, IBufferizable {
         }
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
         Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
-        scheduler.putIfAbsent(K_SCHEDULER_PRIORITY, priority);
+        scheduler.put(K_SCHEDULER_PRIORITY, priority);
 
         return new Activation(
                 this.getAction(), this.getActivationId(),

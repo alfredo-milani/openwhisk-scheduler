@@ -1,7 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler;
 
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
-
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Instant;
@@ -13,6 +11,7 @@ import java.util.Objects;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.ContainerAction.DEFAULT_MEMORY_LIMIT_MiB;
+import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.ContainerAction.getActionIdFrom;
 import static java.util.stream.Collectors.toUnmodifiableList;
 
 /**
@@ -24,8 +23,6 @@ public class Invoker {
     public static final float DEFAULT_ACTION_CONTAINER_LOAD_FACTOR = 0.70f;
     public static final long DEFAULT_ACTIVATION_CONTAINER_CAPACITY = 128;
     public static final float DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR = 0.70f;
-
-    private static final String ACTION_ID_TEMPLATE = "%s/%s/%s";
 
     // invoker name
     private final String invokerName;
@@ -199,13 +196,6 @@ public class Invoker {
             }
         }
         return null;
-    }
-
-    public static @Nonnull String getActionIdFrom(@Nonnull final IBufferizable bufferizable) {
-        checkNotNull(bufferizable, "Activation can not be null.");
-        checkArgument(bufferizable.getAction() != null, "Action can not be null.");
-        final Action action = bufferizable.getAction();
-        return String.format(ACTION_ID_TEMPLATE, action.getPath(), action.getName(), action.getVersion());
     }
 
     public String getInvokerName() {

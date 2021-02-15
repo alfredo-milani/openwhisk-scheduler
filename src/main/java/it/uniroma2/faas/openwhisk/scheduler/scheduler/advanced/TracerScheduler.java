@@ -26,7 +26,7 @@ public class TracerScheduler extends AdvancedScheduler {
 
     private final static Logger LOG = LogManager.getLogger(TracerScheduler.class.getCanonicalName());
 
-    public static final int THREAD_COUNT = 2;
+    public static final int THREAD_COUNT = 1;
     public static final long RUNNING_COMPOSITION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
 
     private final SchedulerPeriodicExecutors schedulerPeriodicExecutors = new SchedulerPeriodicExecutors(0, THREAD_COUNT);
@@ -80,7 +80,8 @@ public class TracerScheduler extends AdvancedScheduler {
                         .map(ITraceable.class::cast)
                         .filter(t -> t.getCause() != null)
                         .count();
-                LOG.trace("");
+                LOG.trace("Received {} objects associated with compositions.",
+                    activationsCountFromComposition);
                 traceCompositions(dataList);
             }
         }
@@ -111,21 +112,21 @@ public class TracerScheduler extends AdvancedScheduler {
                                 ? DEFAULT_PRIORITY
                                 : traceable.getPriority();
                         final Map.Entry<Integer, Long> priorityTimestampEntry =
-                                compositionsMap.get(traceable.getActivationId());
+                                compositionsMap.get(traceable.getCause());
                         // create new entry
                         if (priorityTimestampEntry == null) {
                             compositionsMap.put(
-                                    traceable.getActivationId(),
+                                    traceable.getCause(),
                                     new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
                             );
-                            LOG.trace("New composition registered: priority {} - primary activationId {}.",
-                                    traceablePriority, traceable.getCause());
+                            LOG.trace("Registered new primary activation with id {} - priority {}.",
+                                    traceable.getCause(), traceablePriority);
                         // check if current activation has wrong priority
                         } else {
                             final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
                             // if priority does not match, create new object with correct priority
                             if (priorityFromCompositionMap != traceablePriority) {
-                                LOG.trace("Updating priority level {} associated with cause {}, for activation with id {}",
+                                LOG.trace("Updating to priority level {} associated with cause {}, for activation with id {}",
                                         priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
                                 listIterator.set(traceable.with(priorityFromCompositionMap));
                             }

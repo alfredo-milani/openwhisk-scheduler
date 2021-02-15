@@ -86,6 +86,14 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
         add("{\"action\":{\"name\":\"sleep_one\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"eecaac7f2d2b4b428aac7f2d2bcb429f\",\"blocking\":false,\"cause\":null,\"content\":{\"$scheduler\":{\"limits\":{\"concurrency\":2,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"target\":\"invoker0\",\"priority\":0,\"duration\":43}},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"1-32483c678adacdb4868a59c58e5c5de5\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"HCKGoiAtQEsBdp2C7mjWWOAdtWBr1HrS\",1613292060448],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
     }};
 
+    private final Queue<String> activationCompositionQueue = new ArrayDeque<>(10) {{
+       add("{\"action\":{\"name\":\"cmp\",\"path\":\"guest\",\"version\":\"0.0.2\"},\"activationId\":\"dafbf923d166490dbbf923d166190d17\",\"blocking\":true,\"cause\":\"7402792454a04aca82792454a09aca14\",\"content\":{\"$scheduler\":{\"limits\":{\"concurrency\":3,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"priority\":5,\"target\":\"invoker0\",\"duration\":128},\"sleep_time\":5,\"user\":\"Kira\"},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"2-46afd33766367b04df0fefde394c5027\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"fvxblQafi4egIwb6Hw4KWokFLCbZh305\",1613390988735,[\"P8XxEP8sFUs5g9Gf8pykM4SjpGp6AiQA\",1613390988230]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
+       add("{\"action\":{\"name\":\"fn1\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"2536b89d12c44a16b6b89d12c48a161c\",\"blocking\":true,\"cause\":\"7402792454a04aca82792454a09aca14\",\"content\":{\"$scheduler\":{\"duration\":128,\"limits\":{\"concurrency\":3,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"priority\":5,\"target\":\"invoker0\"},\"sleep_time\":5,\"user\":\"Kira\"},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"1-982cb15dce458913114cb2f6a1e58e4d\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"R9O0tKt4PnXSUz9Qu97g6thHCSP6jgrw\",1613390993698,[\"fvxblQafi4egIwb6Hw4KWokFLCbZh305\",1613390988735,[\"P8XxEP8sFUs5g9Gf8pykM4SjpGp6AiQA\",1613390988230]]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
+       add("{\"action\":{\"name\":\"cmp\",\"path\":\"guest\",\"version\":\"0.0.2\"},\"activationId\":\"1782c4fb97624eea82c4fb97620eea50\",\"blocking\":true,\"cause\":\"7402792454a04aca82792454a09aca14\",\"content\":{\"$scheduler\":{\"limits\":{\"concurrency\":3,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"target\":\"invoker0\",\"priority\":0,\"duration\":10},\"extras\":{\"cmd\":\"Sleep executed for 5 s.\",\"fn_name\":\"/guest/fn1\"},\"$composer\":{\"resuming\":true,\"session\":\"dafbf923d166490dbbf923d166190d17\",\"stack\":[],\"state\":2},\"message\":\"Hello Kira!\",\"sleep_time\":5},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"2-46afd33766367b04df0fefde394c5027\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"MDEXs94DFVXmCKZmRgdIFSA7Zcsp2x0j\",1613391003260,[\"R9O0tKt4PnXSUz9Qu97g6thHCSP6jgrw\",1613390993698,[\"fvxblQafi4egIwb6Hw4KWokFLCbZh305\",1613390988735,[\"P8XxEP8sFUs5g9Gf8pykM4SjpGp6AiQA\",1613390988230]]]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
+       add("{\"action\":{\"name\":\"fn2\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"93a8dd0750934856a8dd0750935856ba\",\"blocking\":true,\"cause\":\"7402792454a04aca82792454a09aca14\",\"content\":{\"$scheduler\":{\"duration\":10,\"limits\":{\"concurrency\":3,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"priority\":0,\"target\":\"invoker0\"},\"extras\":{\"cmd\":\"Sleep executed for 5 s.\",\"fn_name\":\"/guest/fn1\"},\"message\":\"Hello Kira!\",\"sleep_time\":5},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"1-f5098d6fdb4e59dd7348545470ab110f\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"WSfYUfdxl3hm7HHsmykAp1nrFwGKGC8l\",1613391003698,[\"MDEXs94DFVXmCKZmRgdIFSA7Zcsp2x0j\",1613391003260,[\"R9O0tKt4PnXSUz9Qu97g6thHCSP6jgrw\",1613390993698,[\"fvxblQafi4egIwb6Hw4KWokFLCbZh305\",1613390988735,[\"P8XxEP8sFUs5g9Gf8pykM4SjpGp6AiQA\",1613390988230]]]]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
+       add("{\"action\":{\"name\":\"cmp\",\"path\":\"guest\",\"version\":\"0.0.2\"},\"activationId\":\"094700d725eb40fd8700d725eba0fd5e\",\"blocking\":true,\"cause\":\"7402792454a04aca82792454a09aca14\",\"content\":{\"$scheduler\":{\"limits\":{\"concurrency\":3,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"target\":\"invoker0\",\"priority\":0,\"duration\":14},\"extras\":{\"cmd\":\"Sleep executed for 5 s.\",\"fn_name\":\"/guest/fn2\"},\"$composer\":{\"resuming\":true,\"session\":\"dafbf923d166490dbbf923d166190d17\",\"stack\":[],\"state\":3},\"message\":\"Hello guest!\"},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"2-46afd33766367b04df0fefde394c5027\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"zFH9e2zMUBKX04lGjmwXz2chyN0fSChW\",1613391012468,[\"WSfYUfdxl3hm7HHsmykAp1nrFwGKGC8l\",1613391003698,[\"MDEXs94DFVXmCKZmRgdIFSA7Zcsp2x0j\",1613391003260,[\"R9O0tKt4PnXSUz9Qu97g6thHCSP6jgrw\",1613390993698,[\"fvxblQafi4egIwb6Hw4KWokFLCbZh305\",1613390988735,[\"P8XxEP8sFUs5g9Gf8pykM4SjpGp6AiQA\",1613390988230]]]]]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
+    }};
+
     /**
      * It is assumed that only one thread per instance calls this method.
      * @return
@@ -99,15 +107,15 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
         }
         final Collection<Activation> data = new ArrayDeque<>(10);
 
-        /*try {
-            if (!activationQueue.isEmpty())
-                data.add(objectMapper.readValue(activationQueue.poll(), Activation.class));
+        try {
+            if (!activationCompositionQueue.isEmpty())
+                data.add(objectMapper.readValue(activationCompositionQueue.poll(), Activation.class));
         } catch (JsonProcessingException e) {
             LOG.warn("Exception parsing Activation from record.");
             e.printStackTrace();
-        }*/
+        }
 
-        for (int i = 0; i < 1; ++i) {
+        /*for (int i = 0; i < 1; ++i) {
             try {
                 Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),
@@ -119,7 +127,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
-        }
+        }*/
 
         /*try {
             Activation activation = objectMapper.readValue(String.format(actvHealth,
