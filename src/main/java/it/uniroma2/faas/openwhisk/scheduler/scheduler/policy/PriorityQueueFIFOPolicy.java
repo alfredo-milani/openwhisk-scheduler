@@ -14,7 +14,6 @@ class PriorityQueueFIFOPolicy implements IPolicy {
     private final static Logger LOG = LogManager.getLogger(PriorityQueueFIFOPolicy.class.getCanonicalName());
 
     public static final Policy POLICY = Policy.PRIORITY_QUEUE_FIFO;
-    public static final int DEFAULT_PRIORITY = 0;
 
     @Override
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {

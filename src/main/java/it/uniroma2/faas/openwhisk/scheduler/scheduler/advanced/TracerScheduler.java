@@ -3,6 +3,7 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced.ITraceable;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy.DEFAULT_PRIORITY;
 
 /**
  * This class add functionality to base scheduler, tracing all actions generated
@@ -24,15 +26,21 @@ public class TracerScheduler extends AdvancedScheduler {
 
     private final static Logger LOG = LogManager.getLogger(TracerScheduler.class.getCanonicalName());
 
-    public static final long DEFAULT_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
+    public static final int THREAD_COUNT = 2;
+    public static final long RUNNING_COMPOSITION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
 
-    private long timeLimitMs = DEFAULT_TIME_LIMIT_MS;
+    private final SchedulerPeriodicExecutors schedulerPeriodicExecutors = new SchedulerPeriodicExecutors(0, THREAD_COUNT);
+    private final Object mutex = new Object();
+    private long runningCompositionTimeLimitMs = RUNNING_COMPOSITION_TIME_LIMIT_MS;
     // see@ https://stackoverflow.com/questions/14148331/how-to-get-a-hashmap-value-with-three-values
     // represent the state of currently active compositions - <PrimaryActivationID, <Priority, Timestamp>>
     private final Map<String, Map.Entry<Integer, Long>> compositionsMap = new HashMap<>();
 
     public TracerScheduler(@Nonnull Scheduler scheduler) {
         super(scheduler);
+
+        // scheduler periodic activities
+        schedulePeriodicActivities();
     }
 
     /**
@@ -42,7 +50,7 @@ public class TracerScheduler extends AdvancedScheduler {
      * associated with them.
      *
      * In this first implementation, actions are associated with a temporal mark and are removed from the map
-     * once are considered too old, based on {@link #timeLimitMs}. Note that using timeouts can led to consider
+     * once are considered too old, based on {@link #runningCompositionTimeLimitMs}. Note that using timeouts can led to consider
      * activation with high priority to be processed as activation with default priority.
      *
      * In newer implementation could be considered to use Kafka topic "completedN" to remove completed compositions.
@@ -60,16 +68,22 @@ public class TracerScheduler extends AdvancedScheduler {
         final List<?> dataList = new ArrayList<>(data);
         if (stream.equals(ACTIVATION_STREAM)) {
             // counting traceable objects
-            long traceablesCount = dataList.stream()
+            final long traceablesCount = dataList.stream()
                     .filter(ITraceable.class::isInstance)
                     .count();
-            LOG.trace("Traceables objects: {}, over {} received on stream {}.",
-                    traceablesCount, data.size(), stream.toString());
+            LOG.trace("[TRC] - Processing {} traceables objects (over {} received).",
+                    traceablesCount, data.size());
+
             if (traceablesCount > 0) {
+                final long activationsCountFromComposition = dataList.stream()
+                        .filter(ITraceable.class::isInstance)
+                        .map(ITraceable.class::cast)
+                        .filter(t -> t.getCause() != null)
+                        .count();
+                LOG.trace("");
                 traceCompositions(dataList);
             }
         }
-        removeOldEntries(timeLimitMs);
 
         super.newEvent(stream, dataList);
     }
@@ -86,55 +100,77 @@ public class TracerScheduler extends AdvancedScheduler {
 
         // traceable objects are not filtered before to maintain an order list
         ListIterator<?> listIterator = data.listIterator();
-        while (listIterator.hasNext()) {
-            Object datum = listIterator.next();
-            if (datum instanceof ITraceable) {
-                ITraceable traceable = (ITraceable) datum;
-                // if cause is not null current activation belongs to a composition
-                if (traceable.getCause() != null) {
-                    int priority = traceable.getPriority() == null
-                            ? 0
-                            : traceable.getPriority();
-                    Map.Entry<Integer, Long> entry = compositionsMap.putIfAbsent(
-                            traceable.getActivationId(),
-                            new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
-                    );
-                    // if there is already an entry for PrimaryActivationID, use priority associated to process activation
-                    if (entry != null) {
-                        // if traced priority differs, create new traceable with correct priority
-                        if (entry.getKey() != priority) {
-                            LOG.trace("Adding priority level {} associated with cause {} for activation with id {}",
-                                    entry.getKey(), traceable.getCause(), traceable.getActivationId());
-                            listIterator.set(traceable.with(entry.getKey()));
+        synchronized (mutex) {
+            while (listIterator.hasNext()) {
+                final Object datum = listIterator.next();
+                if (datum instanceof ITraceable) {
+                    final ITraceable traceable = (ITraceable) datum;
+                    // if cause is not null current activation belongs to a composition
+                    if (traceable.getCause() != null) {
+                        final int traceablePriority = traceable.getPriority() == null
+                                ? DEFAULT_PRIORITY
+                                : traceable.getPriority();
+                        final Map.Entry<Integer, Long> priorityTimestampEntry =
+                                compositionsMap.get(traceable.getActivationId());
+                        // create new entry
+                        if (priorityTimestampEntry == null) {
+                            compositionsMap.put(
+                                    traceable.getActivationId(),
+                                    new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
+                            );
+                            LOG.trace("New composition registered: priority {} - primary activationId {}.",
+                                    traceablePriority, traceable.getCause());
+                        // check if current activation has wrong priority
+                        } else {
+                            final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
+                            // if priority does not match, create new object with correct priority
+                            if (priorityFromCompositionMap != traceablePriority) {
+                                LOG.trace("Updating priority level {} associated with cause {}, for activation with id {}",
+                                        priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
+                                listIterator.set(traceable.with(priorityFromCompositionMap));
+                            }
                         }
-                    } else {
-                        LOG.trace("Created new entry for cause id {} with priority {} - generated by activation with id {}.",
-                                traceable.getCause(), traceable.getPriority(), traceable.getActivationId());
                     }
+                    // otherwise probably the activation received does not belongs to a composition
                 }
-                // otherwise probably the activation received does not belongs to a composition
             }
         }
     }
 
     /**
-     * Remove entries older than {@link #timeLimitMs}.
+     * Remove entries older than {@link #runningCompositionTimeLimitMs}.
      */
     private void removeOldEntries(long delta) {
-        LOG.trace("Updating compositions map.");
+        checkArgument(delta >= 0, "Delta time must be >= 0.");
         long now = Instant.now().toEpochMilli();
-        int sizeBeforeUpdate = compositionsMap.size();
-        compositionsMap.values().removeIf(entry -> now - entry.getValue() > delta);
-        int sizeAfterUpdate = compositionsMap.size();
-        if (sizeBeforeUpdate != sizeAfterUpdate) {
-            LOG.trace("Removed {} elements from compositions map (retention {} ms).",
-                    sizeBeforeUpdate - sizeAfterUpdate, delta);
+        synchronized (mutex) {
+            int sizeBeforeUpdate = compositionsMap.size();
+            compositionsMap.values().removeIf(entry -> now - entry.getValue() > delta);
+            int sizeAfterUpdate = compositionsMap.size();
+            if (sizeBeforeUpdate != sizeAfterUpdate) {
+                LOG.trace("Removed {} activations from compositions map (time delta - {} ms).",
+                        sizeBeforeUpdate - sizeAfterUpdate, delta);
+            }
         }
     }
 
-    public void setTimeLimitMs(long timeLimitMs) {
-        checkArgument(timeLimitMs >= 0, "Time limit must be >= 0.");
-        this.timeLimitMs = timeLimitMs;
+    private void schedulePeriodicActivities() {
+        // remove entries for too old activations
+        Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
+                () -> removeOldEntries(runningCompositionTimeLimitMs),
+                0L,
+                runningCompositionTimeLimitMs,
+                TimeUnit.MILLISECONDS
+        );
+    }
+
+    public void setRunningCompositionTimeLimitMs(long runningCompositionTimeLimitMs) {
+        checkArgument(runningCompositionTimeLimitMs >= 0, "Time limit must be >= 0.");
+        this.runningCompositionTimeLimitMs = runningCompositionTimeLimitMs;
+    }
+
+    public long getRunningCompositionTimeLimitMs() {
+        return runningCompositionTimeLimitMs;
     }
 
 }

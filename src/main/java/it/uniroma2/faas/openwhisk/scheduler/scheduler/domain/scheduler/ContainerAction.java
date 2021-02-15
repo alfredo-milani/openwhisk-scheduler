@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class ContainerAction extends Action {
+public class ContainerAction {
 
     public static final long DEFAULT_CONCURRENCY_LIMIT = 1;
     public static final long DEFAULT_MEMORY_LIMIT_MiB = 256;
@@ -19,6 +19,8 @@ public class ContainerAction extends Action {
 
     private static final String ACTION_ID_TEMPLATE = "%s/%s/%s";
 
+    private final Action action;
+    private final String actionId;
     private final long concurrencyLimit;
     private final long memoryLimit;
     private final long timeLimit;
@@ -30,9 +32,16 @@ public class ContainerAction extends Action {
     private long concurrency = 0;
     private long containersCount = 1;
 
-    public ContainerAction(String name, String path, String version,
-                           long concurrencyLimit, long memoryLimit, long timeLimit) {
-        super(name, path, version);
+    public ContainerAction(@Nonnull Action action, long concurrencyLimit,
+                           long memoryLimit, long timeLimit) {
+        checkNotNull(action, "Action can not be null.");
+        checkArgument(concurrencyLimit > 0, "Concurrency limit must be > 0.");
+        checkArgument(memoryLimit > 0, "Memory limit must be > 0.");
+        checkArgument(timeLimit > 0, "Time limit must be > 0.");
+
+        this.action = action;
+        this.actionId = String.format(ACTION_ID_TEMPLATE,
+                action.getPath(), action.getName(), action.getVersion());
         this.concurrencyLimit = concurrencyLimit;
         this.memoryLimit = memoryLimit;
         this.timeLimit = timeLimit;
@@ -51,7 +60,6 @@ public class ContainerAction extends Action {
         checkNotNull(bufferizable, "Activation can not be null.");
         checkArgument(bufferizable.getAction() != null, "Action can not be null.");
 
-        final Action action = bufferizable.getAction();
         long concurrencyLimit = bufferizable.getConcurrencyLimit() == null
                 ? DEFAULT_CONCURRENCY_LIMIT
                 : bufferizable.getConcurrencyLimit();
@@ -62,7 +70,7 @@ public class ContainerAction extends Action {
                 ? DEFAULT_TIME_LIMIT_MS
                 : bufferizable.getTimeLimit();
         return new ContainerAction(
-                action.getName(), action.getPath(), action.getVersion(),
+                bufferizable.getAction(),
                 concurrencyLimit,
                 memoryLimit,
                 timeLimit
@@ -137,8 +145,12 @@ public class ContainerAction extends Action {
         containersCount += containers;
     }
 
+    public Action getAction() {
+        return action;
+    }
+
     public String getActionId() {
-        return String.format(ACTION_ID_TEMPLATE, getPath(), getName(), getVersion());
+        return actionId;
     }
 
     public long getConcurrencyLimit() {
@@ -164,7 +176,8 @@ public class ContainerAction extends Action {
     @Override
     public String toString() {
         return "ContainerAction{" +
-                "concurrencyLimit=" + concurrencyLimit +
+                "action=" + action +
+                ", concurrencyLimit=" + concurrencyLimit +
                 ", memoryLimit=" + memoryLimit +
                 ", timeLimit=" + timeLimit +
                 ", concurrency=" + concurrency +

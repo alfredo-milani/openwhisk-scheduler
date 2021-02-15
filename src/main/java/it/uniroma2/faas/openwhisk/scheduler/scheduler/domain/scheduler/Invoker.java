@@ -5,14 +5,15 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Instant;
+import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.ContainerAction.DEFAULT_MEMORY_LIMIT_MiB;
+import static java.util.stream.Collectors.toUnmodifiableList;
 
 /**
  * It is supposed that this class is externally synchronized.
@@ -35,12 +36,10 @@ public class Invoker {
     // this variable maps unique string representing an action container with its implementation
     private final Map<String, ContainerAction> actionContainerMap;
     // OPTIMIZE: use ConcurrentHashMap
-    // <ActivationID, ContainerAction>
+    // <ActivationID, <ContainerAction, timestamp>>
     // maintaining a mapping between activation ids and containers to fast remove activations
-    private final Map<String, ContainerAction> activationContainerMap;
-    // <ActivationID, timestamp>
-    // maintaining a mapping between activation and timestamp of successfully acquired concurrency
-    private final Map<String, Long> activationTimestampMap;
+    // there is also a timestamp of insertion, that indicate timestamp of successfully acquired concurrency
+    private final Map<String, Map.Entry<ContainerAction, Long>> activationContainerMap;
 
     // available memory
     private long memory;
@@ -72,10 +71,6 @@ public class Invoker {
                 (int) (userMemory / MID_ACTION_CONTAINER_MEMORY_MiB * DEFAULT_ACTION_CONTAINER_LOAD_FACTOR),
                 DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR
         );
-        this.activationTimestampMap = new HashMap<>(
-                (int) (userMemory / MID_ACTION_CONTAINER_MEMORY_MiB * DEFAULT_ACTION_CONTAINER_LOAD_FACTOR),
-                DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR
-        );
     }
 
     public boolean tryAcquireConcurrency(@Nonnull final IBufferizable bufferizable) {
@@ -89,9 +84,8 @@ public class Invoker {
             // check if the container can handle another activation
             if (containerAction.tryAcquireConcurrency()) {
                 // insert new activation in current invoker
-                activationContainerMap.put(bufferizable.getActivationId(), containerAction);
-                // insert timestamp for new activation inserted in current invoker
-                activationTimestampMap.put(bufferizable.getActivationId(), Instant.now().toEpochMilli());
+                activationContainerMap.put(bufferizable.getActivationId(),
+                        new AbstractMap.SimpleImmutableEntry<>(containerAction, Instant.now().toEpochMilli()));
                 return true;
             }
         }
@@ -152,9 +146,11 @@ public class Invoker {
     public void release(@Nonnull final String activationId) {
         checkNotNull(activationId, "Activation ID can not be null.");
 
-        activationTimestampMap.remove(activationId);
-        final ContainerAction containerAction = activationContainerMap.remove(activationId);
-        if (containerAction != null) {
+        final Map.Entry<ContainerAction, Long> containerActionTimestampEntry =
+                activationContainerMap.remove(activationId);
+        if (containerActionTimestampEntry != null) {
+            final ContainerAction containerAction = containerActionTimestampEntry.getKey();
+
             /*// leave one container with no concurrency if no resources are required
             final long containersCountBeforeRelease = containerAction.getContainersCount();
             containerAction.release();
@@ -180,10 +176,10 @@ public class Invoker {
     public void releaseAllOldThan(long delta) {
         checkArgument(delta >= 0, "Delta time must be >= 0.");
         final long now = Instant.now().toEpochMilli();
-        activationTimestampMap.entrySet().stream()
-                .filter(activation -> now - activation.getValue() > delta)
+        activationContainerMap.entrySet().stream()
+                .filter(entry -> now - entry.getValue().getValue() > delta)
                 .map(Map.Entry::getKey)
-                .collect(Collectors.toList())
+                .collect(toUnmodifiableList())
                 .forEach(this::release);
     }
 
@@ -272,7 +268,6 @@ public class Invoker {
      */
     public void removeAllContainers() {
         activationContainerMap.clear();
-        activationTimestampMap.clear();
         actionContainerMap.clear();
         memory = userMemory;
     }
@@ -297,7 +292,6 @@ public class Invoker {
                 ", userMemory=" + userMemory +
                 ", actionContainerMap=" + actionContainerMap +
                 ", activationContainerMap=" + activationContainerMap +
-                ", activationTimestampMap=" + activationTimestampMap +
                 ", memory=" + memory +
                 ", state=" + state +
                 ", update=" + timestamp +
