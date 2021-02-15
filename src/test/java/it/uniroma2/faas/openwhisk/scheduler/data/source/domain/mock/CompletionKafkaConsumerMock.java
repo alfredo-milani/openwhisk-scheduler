@@ -54,6 +54,9 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
         add("{\"activationId\":\"766a4164fb8c4560aa4164fb8c556017\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"sid_invokerHealth\",1613291769810]}");
         add("{\"activationId\":\"eecaac7f2d2b4b428aac7f2d2bcb429f\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"HCKGoiAtQEsBdp2C7mjWWOAdtWBr1HrS\",1613292060448]}");
     }};
+    private final Queue<Boolean> booleanQueue = new ArrayDeque<>(3) {{
+        add(false); add(false); add(true);
+    }};
 
     /**
      * It is assumed that only one thread per instance calls this method.
@@ -84,6 +87,8 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
                 }
             }
         }*/
+
+//        if (booleanQueue.poll()) throw new NullPointerException("EXCEPTION HERE, on COMPLETION!");
 
         for (int i = 0; i < 2; ++i) {
             try {

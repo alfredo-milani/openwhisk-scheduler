@@ -10,6 +10,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerSafeExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.logging.log4j.LogManager;
@@ -53,6 +54,7 @@ public class BufferedSchedulerMock extends Scheduler {
     // per invoker max queue size
     protected int maxBufferSize = MAX_BUFFER_SIZE;
     private final SchedulerExecutors schedulerExecutors = new SchedulerExecutors(THREAD_COUNT, 0);
+//    private final SchedulerSafeExecutors schedulerExecutors = new SchedulerSafeExecutors(THREAD_COUNT, 0);
     private final SchedulerPeriodicExecutors schedulerPeriodicExecutors = new SchedulerPeriodicExecutors(0, THREAD_COUNT);
     private final Object mutex = new Object();
     // <targetInvoker, Invoker>
@@ -90,7 +92,7 @@ public class BufferedSchedulerMock extends Scheduler {
         this.policy = policy;
         this.producer = producer;
 
-        // scheduler periodic activities
+        // schedule periodic activities
         schedulePeriodicActivities();
     }
 

@@ -233,7 +233,6 @@ public final class Activation implements ITraceable, IBufferizable {
     private final String targetInvoker;
     // using Integer priority, there is not an upper bound to max priority
     private final Integer priority;
-    // scheduling duration
     // at creation, contains creation timestamp
     private final long creationTimestamp;
     // indicate invoker overloading
@@ -418,6 +417,11 @@ public final class Activation implements ITraceable, IBufferizable {
     }
 
     @JsonIgnore
+    public long getCreationTimestamp() {
+        return creationTimestamp;
+    }
+
+    @JsonIgnore
     @Override
     public @Nullable Boolean getOverload() {
         return overload;
@@ -473,6 +477,7 @@ public final class Activation implements ITraceable, IBufferizable {
                 ", user=" + user +
                 ", targetInvoker='" + targetInvoker + '\'' +
                 ", priority=" + priority +
+                ", creationTimestamp=" + creationTimestamp +
                 ", overload=" + overload +
                 ", concurrencyLimit=" + concurrencyLimit +
                 ", memoryLimit=" + memoryLimit +

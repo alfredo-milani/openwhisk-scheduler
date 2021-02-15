@@ -85,16 +85,16 @@ public class SchedulerComponent {
         // TODO: implement custom executor service to restart threads in case of crash
         //   see@ https://aozturk.medium.com/how-to-handle-uncaught-exceptions-in-java-abf819347906
         // create global app executors
-        SchedulerExecutors executors = new SchedulerExecutors(0, 2);
+        final SchedulerExecutors executors = new SchedulerExecutors(0, 2);
 
         // entities
-        List<Callable<String>> dataSourceConsumers = new ArrayList<>();
-        List<Closeable> closeables = new ArrayList<>();
+        final List<Callable<String>> dataSourceConsumers = new ArrayList<>();
+        final List<Closeable> closeables = new ArrayList<>();
 
         // see@ https://stackoverflow.com/questions/51753883/increase-the-number-of-messages-read-by-a-kafka-consumer-in-a-single-poll
         // see@ https://stackoverflow.com/questions/61552431/kafka-consumer-poll-multiple-records-fetch
         // kafka consumer
-        Properties kafkaConsumerProperties = new Properties() {{
+        final Properties kafkaConsumerProperties = new Properties() {{
             put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, config.getKafkaBootstrapServers());
             put(ConsumerConfig.GROUP_ID_CONFIG, "ow-scheduler-consumer");
             put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
@@ -115,7 +115,7 @@ public class SchedulerComponent {
         );
 
         // kafka producer
-        Properties kafkaProducerProperties = new Properties() {{
+        final Properties kafkaProducerProperties = new Properties() {{
             put(ProducerConfig.CLIENT_ID_CONFIG, AbstractKafkaProducer.class.getSimpleName());
             put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, config.getKafkaBootstrapServers());
             // wait acks only from leader
@@ -152,6 +152,7 @@ public class SchedulerComponent {
             scheduler = new TracerScheduler(scheduler);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
         }
+        final Scheduler finalScheduler = scheduler;
 
         activationsKafkaConsumer.register(List.of(scheduler));
         dataSourceConsumers.add(activationsKafkaConsumer);
@@ -167,6 +168,7 @@ public class SchedulerComponent {
                 }
             });
             executors.shutdown();
+            finalScheduler.shutdown();
             LogManager.shutdown();
         }));
 

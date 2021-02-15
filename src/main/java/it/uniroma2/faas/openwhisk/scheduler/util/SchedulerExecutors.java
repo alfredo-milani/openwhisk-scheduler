@@ -27,7 +27,8 @@ public class SchedulerExecutors {
                 : null;
     }
 
-    public SchedulerExecutors(@Nullable ExecutorService networkIO, @Nullable ExecutorService computation) {
+    public SchedulerExecutors(@Nullable ExecutorService networkIO,
+                              @Nullable ExecutorService computation) {
         this.networkIO = networkIO;
         this.computation = computation;
     }

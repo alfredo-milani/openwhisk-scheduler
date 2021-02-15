@@ -106,7 +106,8 @@ public class BufferedScheduler extends Scheduler {
     }
 
     /**
-     * Note: Apache OpenWhisk Controller component knows if invokers are overloaded, so upon
+     *
+     *
      * @param stream
      * @param data
      */
@@ -235,7 +236,7 @@ public class BufferedScheduler extends Scheduler {
                             // assign its value to null to create it later (in health checking phase)
                             if (!invokerCompletionConsumerMap.containsKey(invokerTarget)) {
                                 invokerCompletionConsumerMap.put(invokerTarget,
-                                        createCompletionConsumerFrom(getInstanceFromInvokerTarget(invokerTarget)));
+                                        createCompletionConsumerFrom(getInstanceFrom(invokerTarget)));
                             }
                         }
 
@@ -452,6 +453,8 @@ public class BufferedScheduler extends Scheduler {
         if (invokersMap.isEmpty()) return;
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
+                // invoker already in offline state, so check next invoker
+                if (invoker.getState() == OFFLINE) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as offline
                 if (now - invoker.getTimestamp() > offlineCheck) {
                     // timestamp of the last update will not be updated
@@ -471,6 +474,8 @@ public class BufferedScheduler extends Scheduler {
                     continue;
                 }
 
+                // invoker already in unhealthy state, so check next invoker
+                if (invoker.getState() == UNHEALTHY) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
                 if (now - invoker.getTimestamp() > healthCheck) {
                     // timestamp of the last update will not be updated
@@ -512,7 +517,7 @@ public class BufferedScheduler extends Scheduler {
                         invokerCompletionConsumerMap.get(invokerTarget);
                 // if there are completion Kafka consumers marked as null, they must be created
                 if (completionKafkaConsumer == null) {
-                    final int invokerInstance = getInstanceFromInvokerTarget(invokerTarget);
+                    final int invokerInstance = getInstanceFrom(invokerTarget);
                     // OPTIMIZE: should Kafka consumer creation be placed
                     //   outside synchronized block ?
                     invokerCompletionConsumerMap.put(invokerTarget,
@@ -560,7 +565,7 @@ public class BufferedScheduler extends Scheduler {
         return instance.getInstanceType().getName() + instance.getInstance();
     }
 
-    public static int getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
+    public static int getInstanceFrom(@Nonnull String invokerTarget) {
         checkNotNull(invokerTarget, "Invoker target can not be null.");
         return Integer.parseInt(invokerTarget.replace("invoker", ""));
     }
