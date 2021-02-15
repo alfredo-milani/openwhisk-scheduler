@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -135,7 +134,7 @@ public class ActivationTest {
     }
 
     @Test
-    public void whenActivationIsIvnokerHealthTestAction_thenTrue() throws Exception {
+    public void whenActivationIsInvokerHealthTestAction_thenTrue() throws Exception {
         final String recordOneDigit = "{\"action\":{\"name\":\"invokerHealthTestAction0\",\"path\":\"whisk.system\",\"version\":\"0.0.1\"},\"activationId\":\"b91ec105c18f4e8d9ec105c18f4e8d78\",\"blocking\":false,\"content\":{\"$scheduler\":{\"target\":\"invoker0\"}},\"initArgs\":[],\"lockedArgs\":{},\"revision\":null,\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"sid_invokerHealth\",1613297231269],\"user\":{\"authkey\":{\"api_key\":\"9327d432-cc30-472c-a7d4-32cc30872c45:oxk6Z7S5vxomcukeC20CKhIge2SxXxG9n7301QRJxjZVWr87WU3lSeb62E9En38g\"},\"limits\":{},\"namespace\":{\"name\":\"whisk.system\",\"uuid\":\"9327d432-cc30-472c-a7d4-32cc30872c45\"},\"rights\":[],\"subject\":\"whisk.system\"}}";
         final String recordTwoDigits = "{\"action\":{\"name\":\"invokerHealthTestAction12\",\"path\":\"whisk.system\",\"version\":\"0.0.1\"},\"activationId\":\"b91ec105c18f4e8d9ec105c18f4e8d78\",\"blocking\":false,\"content\":{\"$scheduler\":{\"target\":\"invoker0\"}},\"initArgs\":[],\"lockedArgs\":{},\"revision\":null,\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"sid_invokerHealth\",1613297231269],\"user\":{\"authkey\":{\"api_key\":\"9327d432-cc30-472c-a7d4-32cc30872c45:oxk6Z7S5vxomcukeC20CKhIge2SxXxG9n7301QRJxjZVWr87WU3lSeb62E9En38g\"},\"limits\":{},\"namespace\":{\"name\":\"whisk.system\",\"uuid\":\"9327d432-cc30-472c-a7d4-32cc30872c45\"},\"rights\":[],\"subject\":\"whisk.system\"}}";
         final String recordThreeDigits = "{\"action\":{\"name\":\"invokerHealthTestAction125\",\"path\":\"whisk.system\",\"version\":\"0.0.1\"},\"activationId\":\"b91ec105c18f4e8d9ec105c18f4e8d78\",\"blocking\":false,\"content\":{\"$scheduler\":{\"target\":\"invoker0\"}},\"initArgs\":[],\"lockedArgs\":{},\"revision\":null,\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"sid_invokerHealth\",1613297231269],\"user\":{\"authkey\":{\"api_key\":\"9327d432-cc30-472c-a7d4-32cc30872c45:oxk6Z7S5vxomcukeC20CKhIge2SxXxG9n7301QRJxjZVWr87WU3lSeb62E9En38g\"},\"limits\":{},\"namespace\":{\"name\":\"whisk.system\",\"uuid\":\"9327d432-cc30-472c-a7d4-32cc30872c45\"},\"rights\":[],\"subject\":\"whisk.system\"}}";

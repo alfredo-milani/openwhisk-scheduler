@@ -180,6 +180,10 @@ public class BufferedScheduler extends Scheduler {
                             LOG.trace("Failing to process completion from invoker {}.", invokerTarget);
                             continue;
                         }
+                        if (activationId == null) {
+                            LOG.warn("Completion received does not have valid activationId.");
+                            continue;
+                        }
                         final Invoker invoker = invokersMap.get(invokerTarget);
 
                         // there is no reference to this invoker in the system

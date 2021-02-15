@@ -77,8 +77,94 @@ public class Response {
      *   }
      */
 
+    /* For composition: compositions have "cause" field
+     * {
+     *   "response": {
+     *     "activationId": "81785d241fe94fd2b85d241fe9bfd24e",
+     *     "annotations": [
+     *       {
+     *         "key": "causedBy",
+     *         "value": "sequence"
+     *       },
+     *       {
+     *         "key": "path",
+     *         "value": "guest/cmp"
+     *       },
+     *       {
+     *         "key": "waitTime",
+     *         "value": 960
+     *       },
+     *       {
+     *         "key": "kind",
+     *         "value": "nodejs:10"
+     *       },
+     *       {
+     *         "key": "timeout",
+     *         "value": false
+     *       },
+     *       {
+     *         "key": "limits",
+     *         "value": {
+     *           "concurrency": 3,
+     *           "logs": 10,
+     *           "memory": 256,
+     *           "timeout": 60000
+     *         }
+     *       },
+     *       {
+     *         "key": "initTime",
+     *         "value": 530
+     *       }
+     *     ],
+     *     "cause": "802c89ce6b414636ac89ce6b4196361f",
+     *     "duration": 613,
+     *     "end": 1613386872211,
+     *     "logs": [],
+     *     "name": "cmp",
+     *     "namespace": "guest",
+     *     "publish": false,
+     *     "response": {
+     *       "result": {
+     *         "action": "/_/fn1",
+     *         "method": "action",
+     *         "params": {
+     *           "$scheduler": {
+     *             "duration": 7,
+     *             "limits": {
+     *               "concurrency": 3,
+     *               "memory": 256,
+     *               "timeout": 60000,
+     *               "userMemory": 2048
+     *             },
+     *             "overload": false,
+     *             "priority": 0,
+     *             "target": "invoker0"
+     *           },
+     *           "sleep_time": 5,
+     *           "user": "Kira"
+     *         },
+     *         "state": {
+     *           "$composer": {
+     *             "resuming": true,
+     *             "session": "81785d241fe94fd2b85d241fe9bfd24e",
+     *             "stack": [],
+     *             "state": 2
+     *           }
+     *         }
+     *       },
+     *       "size": 335,
+     *       "statusCode": 0
+     *     },
+     *     "start": 1613386871598,
+     *     "subject": "guest",
+     *     "version": "0.0.2"
+     *   }
+     * }
+     */
+
     private final String activationId;
     private final List<Map<String, Object>> annotations;
+    private final String cause;
     private final Long duration;
     private final Long end;
     private final List<String> logs;
@@ -92,13 +178,15 @@ public class Response {
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
     public Response(@JsonProperty("activationId") String activationId, @JsonProperty("annotations") List<Map<String, Object>> annotations,
-                    @JsonProperty("duration") Long duration, @JsonProperty("end") Long end,
-                    @JsonProperty("logs") List<String> logs, @JsonProperty("name") String name,
-                    @JsonProperty("namespace") String namespace, @JsonProperty("publish") Boolean publish,
-                    @JsonProperty("response") Result result, @JsonProperty("start") Long start,
-                    @JsonProperty("subject") String subject, @JsonProperty("version") String version) {
+                    @JsonProperty("cause") String cause, @JsonProperty("duration") Long duration,
+                    @JsonProperty("end") Long end, @JsonProperty("logs") List<String> logs,
+                    @JsonProperty("name") String name, @JsonProperty("namespace") String namespace,
+                    @JsonProperty("publish") Boolean publish, @JsonProperty("response") Result result,
+                    @JsonProperty("start") Long start, @JsonProperty("subject") String subject,
+                    @JsonProperty("version") String version) {
         this.activationId = activationId;
         this.annotations = annotations;
+        this.cause = cause;
         this.duration = duration;
         this.end = end;
         this.logs = logs;
@@ -117,6 +205,10 @@ public class Response {
 
     public List<Map<String, Object>> getAnnotations() {
         return annotations;
+    }
+
+    public String getCause() {
+        return cause;
     }
 
     public Long getDuration() {
@@ -164,6 +256,7 @@ public class Response {
         return "Response{" +
                 "activationId='" + activationId + '\'' +
                 ", annotations=" + annotations +
+                ", cause='" + cause + '\'' +
                 ", duration=" + duration +
                 ", end=" + end +
                 ", logs=" + logs +

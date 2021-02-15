@@ -10,7 +10,6 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
-import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerSafeExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.logging.log4j.LogManager;
