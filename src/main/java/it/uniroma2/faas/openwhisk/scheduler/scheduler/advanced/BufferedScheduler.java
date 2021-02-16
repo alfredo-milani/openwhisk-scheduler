@@ -145,7 +145,7 @@ public class BufferedScheduler extends Scheduler {
                         // remove from buffer all activations that can be processed on invokers
                         //   (so, invoker has sufficient resources to process the activations)
                         invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
-                                new ArrayList<>(invokersMap.keySet())));
+                                new HashSet<>(invokersMap.keySet())));
                     }
                 }
                 // send activations
@@ -162,9 +162,8 @@ public class BufferedScheduler extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
-                    // <invokerTarget, completionCount>
-                    // mapping between invoker and its processed completions
-                    final Map<String, Integer> invokerCompletionCountMap = new HashMap<>(invokersMap.size());
+                    // contains id of invokers that have processed at least one completion
+                    final Set<String> invokersWithCompletions = new HashSet<>(invokersMap.size());
 
                     // first, free resources for all received completions
                     for (final Completion completion : completions) {
@@ -193,24 +192,25 @@ public class BufferedScheduler extends Scheduler {
                         // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
                         // check if activation is effectively released
-                        // activations that do not release resource are invokerHealthTestAction
+                        // activations that do not need to release resource are invokerHealthTestAction
                         if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
                             LOG.trace("Received 1 invokerHealthTestAction.");
                             continue;
                         }
 
-                        // if invoker target is healthy, insert max completionsCount of activations
-                        //   that could be scheduled on it
-                        Integer completionsCount = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1);
-                        if (completionsCount != null) invokerCompletionCountMap.put(invokerTarget, ++completionsCount);
+                        // add invoker to the set of invokers that have processed at least one completion
+                        // note that, if n completions have been received, it is not sufficient check for
+                        //   first n buffered activations because it is possible that one of the completion processed
+                        //   released enough resources for m buffered activations
+                        invokersWithCompletions.add(invokerTarget);
                     }
 
                     // second, for all invokers that have produced at least one completion,
-                    //   check if there is a buffered activation that can be scheduled on it
+                    //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
-                    if (!invokerCompletionCountMap.isEmpty())
+                    if (!invokersWithCompletions.isEmpty())
                         invocationQueue.addAll(
-                                pollAndAcquireAtMostResourcesForAllFlattened(invokerCompletionCountMap));
+                                pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -231,7 +231,7 @@ public class BufferedScheduler extends Scheduler {
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
                     // contains id of invokers that have turned healthy
-                    final List<String> invokersTurnedHealthy = new ArrayList<>();
+                    final Set<String> invokersTurnedHealthy = new HashSet<>(invokersMap.size());
 
                     for (final Health health : heartbeats) {
                         final String invokerTarget = getInvokerTargetFrom(health.getInstance());
@@ -261,7 +261,7 @@ public class BufferedScheduler extends Scheduler {
                             invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
                             LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
 
-                            // add invoker to the list of invokers that have turned healthy
+                            // add invoker to the set of invokers that have turned healthy
                             invokersTurnedHealthy.add(invokerTarget);
                         }
                     }
@@ -297,6 +297,7 @@ public class BufferedScheduler extends Scheduler {
     }
 
     private void buffering(@Nonnull Map<String, Collection<IBufferizable>> invokerBufferizableMap) {
+        checkNotNull(invokerBufferizableMap, "Input map can not be null.");
         invokerBufferizableMap.forEach(this::buffering);
     }
 
@@ -326,6 +327,25 @@ public class BufferedScheduler extends Scheduler {
 
             invokerBufferMap.put(invoker, (Queue<IBufferizable>) policy.apply(buffer));
         }
+    }
+
+    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull Set<String> invokers) {
+        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireResourcesForAll(invokers);
+        return invokerQueueMap.values().stream()
+                .flatMap(Queue::stream)
+                .collect(Collectors.toCollection(ArrayDeque::new));
+    }
+
+    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireResourcesForAll(@Nonnull Set<String> invokers) {
+        checkNotNull(invokers, "Invokers set can not be null.");
+        final Map<String, Integer> invokerCountMap = new HashMap<>(invokers.size());
+        for (final String invoker : invokers) {
+            invokerCountMap.put(invoker, Integer.MAX_VALUE);
+        }
+        return pollAndAcquireAtMostResourcesForAll(invokerCountMap).entrySet().stream()
+                .filter(entry -> entry.getValue() != null)
+                .filter(entry -> !entry.getValue().isEmpty())
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull List<String> invokers) {
