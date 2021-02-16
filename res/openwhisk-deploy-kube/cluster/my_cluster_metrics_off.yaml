@@ -9,9 +9,9 @@ whisk:
   # override openwhisk's default limit
   limits:
     # default 60
-    actionsInvokesPerminute: 500
+    actionsInvokesPerminute: 5000
     # default 30
-    actionsInvokesConcurrent: 50
+    actionsInvokesConcurrent: 500
     # default 60
     triggersFiresPerminute: 200
     # default 50
@@ -92,7 +92,7 @@ scheduler:
 analyzer:
   external: false
   imageName: "ow-analyzer"
-  imageTag: "0.0.13"
+  imageTag: "0.0.1"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"

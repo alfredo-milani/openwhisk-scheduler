@@ -135,7 +135,8 @@ public class BufferedScheduler extends Scheduler {
                 // remove invoker test action from input queue to be processed, if any
                 if (!invocationQueue.isEmpty()) {
                     bufferizables.removeAll(invocationQueue);
-                    LOG.trace("Received {} invokerHealthTestAction.", invocationQueue.size());
+                    invocationQueue.forEach(a -> LOG.trace("Activations with id {} did not acquire any resources.",
+                            a.getActivationId()));
                 }
                 if (!bufferizables.isEmpty()) {
                     synchronized (mutex) {
