@@ -78,7 +78,7 @@ scheduler:
   host: null
   # policy: pass_through
   policy: priority_queue_fifo
-  tracing: true
+  tracing: false
   buffering: true
   pollIntervalMs: "50"
   fetchMinBytes: "1"

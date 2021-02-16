@@ -200,7 +200,7 @@ public class BufferedScheduler extends Scheduler {
                         // check if activation is effectively released
                         // activations that do not need to release resource are invokerHealthTestAction
                         if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
-                            LOG.trace("Received 1 invokerHealthTestAction.");
+                            LOG.trace("Activation with id {} did not release any resources.", activationId);
                             continue;
                         }
 
@@ -456,12 +456,13 @@ public class BufferedScheduler extends Scheduler {
                     }
                 })
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        final Map<String, String> invokerMemoryTrace = invokersMap.entrySet().stream()
-                .map(entry -> new AbstractMap.SimpleEntry<>(
-                        entry.getKey(), entry.getValue().getMemory() + " MiB remaining"))
+        final Map<String, String> invokerResourcesTrace = invokersMap.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
+                        entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
+                        entry.getValue().getMemory() + " MiB remaining)"))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         LOG.trace("Scheduling - {}.", invokerQueueTrace);
-        LOG.trace("Memory - {}.", invokerMemoryTrace);
+        LOG.trace("Resources - {}.", invokerResourcesTrace);
         LOG.trace("Buffer - {}.", invokerBufferMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
         return invokerBufferizableMap;
@@ -569,7 +570,7 @@ public class BufferedScheduler extends Scheduler {
         final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
         LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
         final CompletionKafkaConsumer completionKafkaConsumer = new CompletionKafkaConsumer(
-                List.of(topic), kafkaConsumerProperties, 100
+                List.of(topic), kafkaConsumerProperties, 50
         );
         register(List.of(completionKafkaConsumer));
         completionKafkaConsumer.register(List.of(this));

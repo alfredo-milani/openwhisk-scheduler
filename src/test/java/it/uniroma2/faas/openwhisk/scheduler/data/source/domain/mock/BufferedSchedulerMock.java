@@ -144,7 +144,7 @@ public class BufferedSchedulerMock extends Scheduler {
                         //   reorder the buffer using selected policy
                         buffering(bufferizables);
 
-                        // set containing invokers that have should receive at least one activation
+                        // set containing invokers associated with activations just received
                         final Set<String> invokersWithActivations = bufferizables.stream()
                                 .map(ISchedulable::getTargetInvoker)
                                 .collect(toSet());
@@ -164,6 +164,7 @@ public class BufferedSchedulerMock extends Scheduler {
                     .collect(Collectors.toCollection(ArrayDeque::new));
             LOG.trace("[CMP] - Processing {} completion objects (over {} received).",
                     completions.size(), data.size());
+
             if (completions.size() > 0) {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
@@ -200,7 +201,7 @@ public class BufferedSchedulerMock extends Scheduler {
                         // check if activation is effectively released
                         // activations that do not need to release resource are invokerHealthTestAction
                         if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
-                            LOG.trace("Received 1 invokerHealthTestAction.");
+                            LOG.trace("Activation with id {} did not release any resources.", activationId);
                             continue;
                         }
 
@@ -223,12 +224,11 @@ public class BufferedSchedulerMock extends Scheduler {
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
-            final Collection<? extends Health> heartbeats = data.stream()
+            final Set<? extends Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
                     .map(Health.class::cast)
-                    // get only unique hearth-beats messages
-                    .distinct()
-                    .collect(Collectors.toCollection(ArrayDeque::new));
+                    // get only unique hearth-beats messages using Set data structure
+                    .collect(toSet());
             /*LOG.trace("[HLT] - Processing {} uniques hearth-beats objects (over {} received).",
                     heartbeats.size(), data.size());*/
 
@@ -236,6 +236,9 @@ public class BufferedSchedulerMock extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
+                    // contains id of invokers that have turned healthy
+                    final Set<String> invokersTurnedHealthy = new HashSet<>(invokersMap.size());
+
                     for (final Health health : heartbeats) {
                         final String invokerTarget = getInvokerTargetFrom(health.getInstance());
                         Invoker invoker = invokersMap.get(invokerTarget);
@@ -263,14 +266,12 @@ public class BufferedSchedulerMock extends Scheduler {
                             // upon receiving hearth-beat from invoker, mark that invoker as healthy
                             invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
                             LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
+
+                            // add invoker to the set of invokers that have turned healthy
+                            invokersTurnedHealthy.add(invokerTarget);
                         }
                     }
 
-                    // contains id of invokers that have turned healthy
-                    final Set<String> invokersTurnedHealthy = heartbeats.stream()
-                            .map(h -> h.getInstance().getInstanceType().getName() +
-                                    h.getInstance().getInstance())
-                            .collect(toSet());
                     // remove all activations from buffer for which invokers
                     //   that have turned healthy can handle
                     if (!invokersTurnedHealthy.isEmpty())
@@ -456,12 +457,13 @@ public class BufferedSchedulerMock extends Scheduler {
                     }
                 })
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        final Map<String, String> invokerMemoryTrace = invokersMap.entrySet().stream()
-                .map(entry -> new AbstractMap.SimpleEntry<>(
-                        entry.getKey(), entry.getValue().getMemory() + " MiB remaining"))
+        final Map<String, String> invokerResourcesTrace = invokersMap.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
+                        entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
+                        entry.getValue().getMemory() + " MiB remaining)"))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         LOG.trace("Scheduling - {}.", invokerQueueTrace);
-        LOG.trace("Memory - {}.", invokerMemoryTrace);
+        LOG.trace("Resources - {}.", invokerResourcesTrace);
         LOG.trace("Buffer - {}.", invokerBufferMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
         return invokerBufferizableMap;
@@ -569,7 +571,7 @@ public class BufferedSchedulerMock extends Scheduler {
         final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
         LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
         final CompletionKafkaConsumerMock completionKafkaConsumer = new CompletionKafkaConsumerMock(
-                List.of(topic), kafkaConsumerProperties, 100
+                List.of(topic), kafkaConsumerProperties, 50
         );
         register(List.of(completionKafkaConsumer));
         completionKafkaConsumer.register(List.of(this));
