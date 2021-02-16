@@ -107,15 +107,15 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
         }
         final Collection<Activation> data = new ArrayDeque<>(10);
 
-        try {
+        /*try {
             if (!activationCompositionQueue.isEmpty())
                 data.add(objectMapper.readValue(activationCompositionQueue.poll(), Activation.class));
         } catch (JsonProcessingException e) {
             LOG.warn("Exception parsing Activation from record.");
             e.printStackTrace();
-        }
+        }*/
 
-        /*for (int i = 0; i < 1; ++i) {
+        for (int i = 0; i < 10; ++i) {
             try {
                 Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),
@@ -127,7 +127,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
-        }*/
+        }
 
         /*try {
             Activation activation = objectMapper.readValue(String.format(actvHealth,

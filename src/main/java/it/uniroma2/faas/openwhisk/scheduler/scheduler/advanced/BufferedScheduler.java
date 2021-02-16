@@ -142,10 +142,15 @@ public class BufferedScheduler extends Scheduler {
                         // insert all received elements in the buffer,
                         //   reorder the buffer using selected policy
                         buffering(bufferizables);
+
+                        // set containing invokers associated with activations just received
+                        final Set<String> invokersWithActivations = bufferizables.stream()
+                                .map(ISchedulable::getTargetInvoker)
+                                .collect(toSet());
                         // remove from buffer all activations that can be processed on invokers
                         //   (so, invoker has sufficient resources to process the activations)
                         invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
-                                new HashSet<>(invokersMap.keySet())));
+                                invokersWithActivations));
                     }
                 }
                 // send activations
@@ -158,6 +163,7 @@ public class BufferedScheduler extends Scheduler {
                     .collect(Collectors.toCollection(ArrayDeque::new));
             LOG.trace("[CMP] - Processing {} completion objects (over {} received).",
                     completions.size(), data.size());
+
             if (completions.size() > 0) {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
@@ -217,12 +223,11 @@ public class BufferedScheduler extends Scheduler {
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
-            final Collection<? extends Health> heartbeats = data.stream()
+            final Set<? extends Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
                     .map(Health.class::cast)
-                    // get only unique hearth-beats messages
-                    .distinct()
-                    .collect(Collectors.toCollection(ArrayDeque::new));
+                    // get only unique hearth-beats messages using Set data structure
+                    .collect(toSet());
             /*LOG.trace("[HLT] - Processing {} uniques hearth-beats objects (over {} received).",
                     heartbeats.size(), data.size());*/
 
@@ -265,6 +270,7 @@ public class BufferedScheduler extends Scheduler {
                             invokersTurnedHealthy.add(invokerTarget);
                         }
                     }
+
                     // remove all activations from buffer for which invokers
                     //   that have turned healthy can handle
                     if (!invokersTurnedHealthy.isEmpty())

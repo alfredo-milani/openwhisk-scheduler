@@ -143,10 +143,15 @@ public class BufferedSchedulerMock extends Scheduler {
                         // insert all received elements in the buffer,
                         //   reorder the buffer using selected policy
                         buffering(bufferizables);
+
+                        // set containing invokers that have should receive at least one activation
+                        final Set<String> invokersWithActivations = bufferizables.stream()
+                                .map(ISchedulable::getTargetInvoker)
+                                .collect(toSet());
                         // remove from buffer all activations that can be processed on invokers
                         //   (so, invoker has sufficient resources to process the activations)
                         invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
-                                new ArrayList<>(invokersMap.keySet())));
+                                invokersWithActivations));
                     }
                 }
                 // send activations
@@ -163,9 +168,8 @@ public class BufferedSchedulerMock extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
-                    // <invokerTarget, completionCount>
-                    // mapping between invoker and its processed completions
-                    final Map<String, Integer> invokerCompletionCountMap = new HashMap<>(invokersMap.size());
+                    // contains id of invokers that have processed at least one completion
+                    final Set<String> invokersWithCompletions = new HashSet<>(invokersMap.size());
 
                     // first, free resources for all received completions
                     for (final Completion completion : completions) {
@@ -181,25 +185,38 @@ public class BufferedSchedulerMock extends Scheduler {
                             LOG.trace("Failing to process completion from invoker {}.", invokerTarget);
                             continue;
                         }
+                        if (activationId == null) {
+                            LOG.warn("Completion received does not have valid activationId.");
+                            continue;
+                        }
                         final Invoker invoker = invokersMap.get(invokerTarget);
 
                         // there is no reference to this invoker in the system
                         if (invoker == null) continue;
+
+                        final long activationsCountBeforeRelease = invoker.getActivationsCount();
                         // release resources associated with this completion (even if invoker is not healthy)
                         invoker.release(activationId);
+                        // check if activation is effectively released
+                        // activations that do not need to release resource are invokerHealthTestAction
+                        if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
+                            LOG.trace("Received 1 invokerHealthTestAction.");
+                            continue;
+                        }
 
-                        // if invoker target is healthy, insert max completionsCount of activations
-                        //   that could be scheduled on it
-                        Integer completionsCount = invokerCompletionCountMap.putIfAbsent(invokerTarget, 1);
-                        if (completionsCount != null) invokerCompletionCountMap.put(invokerTarget, ++completionsCount);
+                        // add invoker to the set of invokers that have processed at least one completion
+                        // note that, if n completions have been received, it is not sufficient check for
+                        //   first n buffered activations because it is possible that one of the completion processed
+                        //   released enough resources for m buffered activations
+                        invokersWithCompletions.add(invokerTarget);
                     }
 
                     // second, for all invokers that have produced at least one completion,
-                    //   check if there is a buffered activation that can be scheduled on it
+                    //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
-                    if (!invokerCompletionCountMap.isEmpty())
+                    if (!invokersWithCompletions.isEmpty())
                         invocationQueue.addAll(
-                                pollAndAcquireAtMostResourcesForAllFlattened(invokerCompletionCountMap));
+                                pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -219,9 +236,6 @@ public class BufferedSchedulerMock extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
-                    // contains id of invokers that have turned healthy
-                    final List<String> invokersTurnedHealthy = new ArrayList<>();
-
                     for (final Health health : heartbeats) {
                         final String invokerTarget = getInvokerTargetFrom(health.getInstance());
                         Invoker invoker = invokersMap.get(invokerTarget);
@@ -237,7 +251,7 @@ public class BufferedSchedulerMock extends Scheduler {
                             // assign its value to null to create it later (in health checking phase)
                             if (!invokerCompletionConsumerMap.containsKey(invokerTarget)) {
                                 invokerCompletionConsumerMap.put(invokerTarget,
-                                        createCompletionConsumerFrom(getInstanceFromInvokerTarget(invokerTarget)));
+                                        createCompletionConsumerFrom(getInstanceFrom(invokerTarget)));
                             }
                         }
 
@@ -249,11 +263,14 @@ public class BufferedSchedulerMock extends Scheduler {
                             // upon receiving hearth-beat from invoker, mark that invoker as healthy
                             invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
                             LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
-
-                            // add invoker to the list of invokers that have turned healthy
-                            invokersTurnedHealthy.add(invokerTarget);
                         }
                     }
+
+                    // contains id of invokers that have turned healthy
+                    final Set<String> invokersTurnedHealthy = heartbeats.stream()
+                            .map(h -> h.getInstance().getInstanceType().getName() +
+                                    h.getInstance().getInstance())
+                            .collect(toSet());
                     // remove all activations from buffer for which invokers
                     //   that have turned healthy can handle
                     if (!invokersTurnedHealthy.isEmpty())
@@ -286,6 +303,7 @@ public class BufferedSchedulerMock extends Scheduler {
     }
 
     private void buffering(@Nonnull Map<String, Collection<IBufferizable>> invokerBufferizableMap) {
+        checkNotNull(invokerBufferizableMap, "Input map can not be null.");
         invokerBufferizableMap.forEach(this::buffering);
     }
 
@@ -315,6 +333,25 @@ public class BufferedSchedulerMock extends Scheduler {
 
             invokerBufferMap.put(invoker, (Queue<IBufferizable>) policy.apply(buffer));
         }
+    }
+
+    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull Set<String> invokers) {
+        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireResourcesForAll(invokers);
+        return invokerQueueMap.values().stream()
+                .flatMap(Queue::stream)
+                .collect(Collectors.toCollection(ArrayDeque::new));
+    }
+
+    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireResourcesForAll(@Nonnull Set<String> invokers) {
+        checkNotNull(invokers, "Invokers set can not be null.");
+        final Map<String, Integer> invokerCountMap = new HashMap<>(invokers.size());
+        for (final String invoker : invokers) {
+            invokerCountMap.put(invoker, Integer.MAX_VALUE);
+        }
+        return pollAndAcquireAtMostResourcesForAll(invokerCountMap).entrySet().stream()
+                .filter(entry -> entry.getValue() != null)
+                .filter(entry -> !entry.getValue().isEmpty())
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull List<String> invokers) {
@@ -454,6 +491,8 @@ public class BufferedSchedulerMock extends Scheduler {
         if (invokersMap.isEmpty()) return;
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
+                // invoker already in offline state, so check next invoker
+                if (invoker.getState() == OFFLINE) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as offline
                 if (now - invoker.getTimestamp() > offlineCheck) {
                     // timestamp of the last update will not be updated
@@ -473,6 +512,8 @@ public class BufferedSchedulerMock extends Scheduler {
                     continue;
                 }
 
+                // invoker already in unhealthy state, so check next invoker
+                if (invoker.getState() == UNHEALTHY) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
                 if (now - invoker.getTimestamp() > healthCheck) {
                     // timestamp of the last update will not be updated
@@ -514,7 +555,7 @@ public class BufferedSchedulerMock extends Scheduler {
                         invokerCompletionConsumerMap.get(invokerTarget);
                 // if there are completion Kafka consumers marked as null, they must be created
                 if (completionKafkaConsumer == null) {
-                    final int invokerInstance = getInstanceFromInvokerTarget(invokerTarget);
+                    final int invokerInstance = getInstanceFrom(invokerTarget);
                     // OPTIMIZE: should Kafka consumer creation be placed
                     //   outside synchronized block ?
                     invokerCompletionConsumerMap.put(invokerTarget,
@@ -562,7 +603,7 @@ public class BufferedSchedulerMock extends Scheduler {
         return instance.getInstanceType().getName() + instance.getInstance();
     }
 
-    public static int getInstanceFromInvokerTarget(@Nonnull String invokerTarget) {
+    public static int getInstanceFrom(@Nonnull String invokerTarget) {
         checkNotNull(invokerTarget, "Invoker target can not be null.");
         return Integer.parseInt(invokerTarget.replace("invoker", ""));
     }
