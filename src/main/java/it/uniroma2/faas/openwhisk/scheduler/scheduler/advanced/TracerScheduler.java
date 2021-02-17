@@ -11,7 +11,6 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -39,7 +38,7 @@ public class TracerScheduler extends AdvancedScheduler {
     // see@ https://stackoverflow.com/questions/14148331/how-to-get-a-hashmap-value-with-three-values
     // represent the state of currently active compositions - <PrimaryActivationID, <Priority, Timestamp>>
     // using ConcurrentHashMap is sufficient to ensure correctness even if there are two threads operating on it
-    private final Map<String, Map.Entry<Integer, Long>> compositionsMap = new ConcurrentHashMap<>();
+    private final Map<String, Map.Entry<Integer, Long>> compositionsMap = new HashMap<>();
 
     public TracerScheduler(@Nonnull Scheduler scheduler) {
         super(scheduler);
@@ -87,9 +86,7 @@ public class TracerScheduler extends AdvancedScheduler {
                         .count();
                 LOG.trace("Received {} objects associated with compositions.",
                     activationsCountFromComposition);
-                synchronized (mutex) {
-                    traceCompositions(dataList);
-                }
+                traceCompositions(dataList);
             }
         } else if (stream.equals(EVENT_STREAM)) {
             final Collection<ActivationEvent> activationEvents = data.stream()
@@ -130,37 +127,39 @@ public class TracerScheduler extends AdvancedScheduler {
 
         // traceable objects are not filtered before to maintain an order list
         ListIterator<?> listIterator = data.listIterator();
-        while (listIterator.hasNext()) {
-            final Object datum = listIterator.next();
-            if (datum instanceof ITraceable) {
-                final ITraceable traceable = (ITraceable) datum;
-                // if cause is not null current activation belongs to a composition
-                if (traceable.getCause() != null) {
-                    final int traceablePriority = traceable.getPriority() == null
-                            ? DEFAULT_PRIORITY
-                            : traceable.getPriority();
-                    final Map.Entry<Integer, Long> priorityTimestampEntry =
-                            compositionsMap.get(traceable.getCause());
-                    // create new entry
-                    if (priorityTimestampEntry == null) {
-                        compositionsMap.put(
-                                traceable.getCause(),
-                                new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
-                        );
-                        LOG.trace("Registered new primary activation with id {} - priority {}.",
-                                traceable.getCause(), traceablePriority);
-                        // check if current activation has wrong priority
-                    } else {
-                        final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
-                        // if priority does not match, create new object with correct priority
-                        if (priorityFromCompositionMap != traceablePriority) {
-                            LOG.trace("Updating to priority level {} associated with cause {}, for activation with id {}",
-                                    priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
-                            listIterator.set(traceable.with(priorityFromCompositionMap));
+        synchronized (mutex) {
+            while (listIterator.hasNext()) {
+                final Object datum = listIterator.next();
+                if (datum instanceof ITraceable) {
+                    final ITraceable traceable = (ITraceable) datum;
+                    // if cause is not null current activation belongs to a composition
+                    if (traceable.getCause() != null) {
+                        final int traceablePriority = traceable.getPriority() == null
+                                ? DEFAULT_PRIORITY
+                                : traceable.getPriority();
+                        final Map.Entry<Integer, Long> priorityTimestampEntry =
+                                compositionsMap.get(traceable.getCause());
+                        // create new entry
+                        if (priorityTimestampEntry == null) {
+                            compositionsMap.put(
+                                    traceable.getCause(),
+                                    new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
+                            );
+                            LOG.trace("Registered new primary activation with id {} - priority {}.",
+                                    traceable.getCause(), traceablePriority);
+                            // check if current activation has wrong priority
+                        } else {
+                            final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
+                            // if priority does not match, create new object with correct priority
+                            if (priorityFromCompositionMap != traceablePriority) {
+                                LOG.trace("Updating to priority level {} associated with cause {}, for activation with id {}",
+                                        priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
+                                listIterator.set(traceable.with(priorityFromCompositionMap));
+                            }
                         }
                     }
+                    // otherwise probably the activation received does not belongs to a composition
                 }
-                // otherwise probably the activation received does not belongs to a composition
             }
         }
     }
