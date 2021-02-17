@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ConsumableKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
+import it.uniroma2.faas.openwhisk.scheduler.util.LineReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -94,6 +96,15 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
        add("{\"action\":{\"name\":\"cmp\",\"path\":\"guest\",\"version\":\"0.0.2\"},\"activationId\":\"094700d725eb40fd8700d725eba0fd5e\",\"blocking\":true,\"cause\":\"7402792454a04aca82792454a09aca14\",\"content\":{\"$scheduler\":{\"limits\":{\"concurrency\":3,\"memory\":256,\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"target\":\"invoker0\",\"priority\":0,\"duration\":14},\"extras\":{\"cmd\":\"Sleep executed for 5 s.\",\"fn_name\":\"/guest/fn2\"},\"$composer\":{\"resuming\":true,\"session\":\"dafbf923d166490dbbf923d166190d17\",\"stack\":[],\"state\":3},\"message\":\"Hello guest!\"},\"initArgs\":[],\"lockedArgs\":{},\"revision\":\"2-46afd33766367b04df0fefde394c5027\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"zFH9e2zMUBKX04lGjmwXz2chyN0fSChW\",1613391012468,[\"WSfYUfdxl3hm7HHsmykAp1nrFwGKGC8l\",1613391003698,[\"MDEXs94DFVXmCKZmRgdIFSA7Zcsp2x0j\",1613391003260,[\"R9O0tKt4PnXSUz9Qu97g6thHCSP6jgrw\",1613390993698,[\"fvxblQafi4egIwb6Hw4KWokFLCbZh305\",1613390988735,[\"P8XxEP8sFUs5g9Gf8pykM4SjpGp6AiQA\",1613390988230]]]]]],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}");
     }};
 
+    private LineReader lineReader;
+    {
+        try {
+            lineReader = new LineReader("/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/tracer_scheduler/invoker0.txt");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * It is assumed that only one thread per instance calls this method.
      * @return
@@ -107,6 +118,15 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
         }
         final Collection<Activation> data = new ArrayDeque<>(10);
 
+        for (int i = 0; i < 5; ++i) {
+            final String record = lineReader.poll();
+            try {
+                data.add(objectMapper.readValue(record, Activation.class));
+            } catch (JsonProcessingException e) {
+                LOG.warn("Exception parsing Activation from record: {}.", record);
+            }
+        }
+
         /*try {
             if (!activationCompositionQueue.isEmpty())
                 data.add(objectMapper.readValue(activationCompositionQueue.poll(), Activation.class));
@@ -115,7 +135,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
             e.printStackTrace();
         }*/
 
-        for (int i = 0; i < 10; ++i) {
+        /*for (int i = 0; i < 10; ++i) {
             try {
                 Activation activation = objectMapper.readValue(String.format(activationBufferedScheduler,
                         UUID.randomUUID(),
@@ -127,7 +147,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
-        }
+        }*/
 
         /*try {
             Activation activation = objectMapper.readValue(String.format(actvHealth,

@@ -161,7 +161,7 @@ public class BufferedScheduler extends Scheduler {
             final Collection<? extends Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
                     .map(Completion.class::cast)
-                    .collect(Collectors.toCollection(ArrayDeque::new));
+                    .collect(toCollection(ArrayDeque::new));
             LOG.trace("[CMP] - Processing {} completion objects (over {} received).",
                     completions.size(), data.size());
 

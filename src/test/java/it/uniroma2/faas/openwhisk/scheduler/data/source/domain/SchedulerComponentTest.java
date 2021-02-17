@@ -32,13 +32,14 @@ public class SchedulerComponentTest {
     public static final String SCHEDULER_TOPIC = "scheduler";
     public static final String HEALTH_TOPIC = "health";
     public static final String COMPLETION_TOPIC = "completed";
+    public static final String EVENT_TOPIC = "events";
 
     public static void start() {
         Configurator.setAllLevels(LOG.getName(), Level.TRACE);
         Configurator.setRootLevel(Level.TRACE);
 
         // create global app executors
-        SchedulerExecutors executors = new SchedulerExecutors(2, 0);
+        SchedulerExecutors executors = new SchedulerExecutors(3, 0);
 
         // entities
         List<Callable<String>> dataSourceConsumers = new ArrayList<>();
@@ -108,6 +109,12 @@ public class SchedulerComponentTest {
         if (tracerSchedulerOption) {
             scheduler = new TracerSchedulerMock(scheduler);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
+            final EventKafkaConsumerMock eventKafkaConsumerMock = new EventKafkaConsumerMock(
+                    List.of(EVENT_TOPIC), kafkaConsumerProperties, 500
+            );
+            eventKafkaConsumerMock.register(List.of(scheduler));
+            dataSourceConsumers.add(eventKafkaConsumerMock);
+            closeables.add(eventKafkaConsumerMock);
         }
         if (healthScheckerSchedulerOption) {
             scheduler = new HealthCheckerSchedulerMock(scheduler);

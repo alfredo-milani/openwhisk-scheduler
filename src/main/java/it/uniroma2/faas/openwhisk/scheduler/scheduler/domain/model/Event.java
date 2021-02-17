@@ -1,54 +1,59 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
-public final class Event implements IConsumable {
+import java.util.Objects;
 
-    /*
-    {
-    "body": {
-        "metricName": "ConcurrentInvocations",
-        "metricValue": 1
-      },
-      "eventType": "Metric",
-      "namespace": "guest",
-      "source": "controller0",
-      "subject": "guest",
-      "timestamp": 1606353576088,
-      "userId": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
-    }
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "eventType", visible = true)
+@JsonSubTypes({
+        @JsonSubTypes.Type(names = "Metric", value = MetricEvent.class),
+        @JsonSubTypes.Type(names = "Activation", value = ActivationEvent.class)
+})
+// @JsonInclude(JsonInclude.Include.NON_NULL)
+public class Event implements IConsumable {
+
+    /* Associated with metric
+     * {
+     *   "body": {
+     *     "metricName": "ConcurrentInvocations",
+     *     "metricValue": 7
+     *   },
+     *   "eventType": "Metric",
+     *   "namespace": "guest",
+     *   "source": "controller0",
+     *   "subject": "guest",
+     *   "timestamp": 1613583572894,
+     *   "userId": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
+     * }
      */
 
-    /*
-    {
-   "body":{
-          "activationId":"841e3f99f40346429e3f99f40396428f",
-          "causedBy":"sequence",
-          "conductor":false,
-          "duration":628,
-          "initTime":575,
-          "kind":"nodejs:10",
-          "memory":256,
-          "name":"guest/cmp",
-          "size":184,
-          "statusCode":0,
-          "waitTime":639
-       },
-       "eventType":"Activation",
-       "namespace":"guest",
-       "source":"invoker0",
-       "subject":"guest",
-       "timestamp":1609870677713,
-       "userId":"23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
-    }
+    /* Associated with an activation
+     * {
+     *   "body": {
+     *     "activationId": "fb70fb0704064336b0fb0704065336a1",
+     *     "causedBy": "sequence",
+     *     "conductor": false,
+     *     "duration": 703,
+     *     "initTime": 0,
+     *     "kind": "nodejs:10",
+     *     "memory": 256,
+     *     "name": "guest/cmp",
+     *     "size": 308,
+     *     "statusCode": 0,
+     *     "waitTime": 4966
+     *   },
+     *   "eventType": "Activation",
+     *   "namespace": "guest",
+     *   "source": "invoker0",
+     *   "subject": "guest",
+     *   "timestamp": 1613583578634,
+     *   "userId": "23bc46b1-71f6-4ed5-8c54-816aa4f8c502"
+     * }
      */
 
-    // OPTIMIZE - Body class should be of two types: Activation and Metric.
-    //  For simplicity, for now, there is only one class.
-    private final Body body;
     private final String eventType;
     private final String namespace;
     private final String source;
@@ -57,21 +62,15 @@ public final class Event implements IConsumable {
     private final String userId;
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public Event(@JsonProperty("body") Body body, @JsonProperty("eventType") String eventType,
-                 @JsonProperty("namespace") String namespace, @JsonProperty("source") String source,
-                 @JsonProperty("subject") String subject, @JsonProperty("timestamp") Long timestamp,
-                 @JsonProperty("userId") String userId) {
-        this.body = body;
+    public Event(@JsonProperty("eventType") String eventType, @JsonProperty("namespace") String namespace,
+                 @JsonProperty("source") String source, @JsonProperty("subject") String subject,
+                 @JsonProperty("timestamp") Long timestamp, @JsonProperty("userId") String userId) {
         this.eventType = eventType;
         this.namespace = namespace;
         this.source = source;
         this.subject = subject;
         this.timestamp = timestamp;
         this.userId = userId;
-    }
-
-    public Body getBody() {
-        return body;
     }
 
     public String getEventType() {
@@ -99,10 +98,24 @@ public final class Event implements IConsumable {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Event event = (Event) o;
+        return Objects.equals(eventType, event.eventType) && Objects.equals(namespace, event.namespace) &&
+                Objects.equals(source, event.source) && Objects.equals(subject, event.subject) &&
+                Objects.equals(timestamp, event.timestamp) && Objects.equals(userId, event.userId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(eventType, namespace, source, subject, timestamp, userId);
+    }
+
+    @Override
     public String toString() {
         return "Event{" +
-                "body=" + body +
-                ", eventType='" + eventType + '\'' +
+                "eventType='" + eventType + '\'' +
                 ", namespace='" + namespace + '\'' +
                 ", source='" + source + '\'' +
                 ", subject='" + subject + '\'' +

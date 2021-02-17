@@ -8,11 +8,13 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompl
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.FailureCompletion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.NonBlockingCompletion;
+import it.uniroma2.faas.openwhisk.scheduler.util.LineReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -58,6 +60,15 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
         add(false); add(false); add(true);
     }};
 
+    private LineReader lineReader;
+    {
+        try {
+            lineReader = new LineReader("/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/tracer_scheduler/completed0.txt");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * It is assumed that only one thread per instance calls this method.
      * @return
@@ -70,6 +81,23 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
             e.printStackTrace();
         }
         final Collection<Completion> data = new ArrayDeque<>(10);
+
+        for (int i = 0; i < 1; ++i) {
+            final String record = lineReader.poll();
+            try {
+                data.add(objectMapper.readValue(record, NonBlockingCompletion.class));
+            } catch (JsonProcessingException e0) {
+                try {
+                    data.add(objectMapper.readValue(record, BlockingCompletion.class));
+                } catch (JsonProcessingException e1) {
+                    try {
+                        data.add(objectMapper.readValue(record, FailureCompletion.class));
+                    } catch (JsonProcessingException e2) {
+                        LOG.warn("Exception parsing Activation from record {}.", record);
+                    }
+                }
+            }
+        }
 
         /*if (!completionQueue.isEmpty()) {
             String completion = completionQueue.poll();
@@ -90,7 +118,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
 
 //        if (booleanQueue.poll()) throw new NullPointerException("EXCEPTION HERE, on COMPLETION!");
 
-        for (int i = 0; i < 2; ++i) {
+        /*for (int i = 0; i < 2; ++i) {
             try {
                 Completion completion = objectMapper.readValue(String.format(completionNonBlocking), NonBlockingCompletion.class);
                 data.add(completion);
@@ -116,7 +144,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
                 LOG.warn("Exception parsing Activation from record: ");
                 e.printStackTrace();
             }
-        }
+        }*/
 
         LOG.trace("Sending {} consumable to observers.", data.size());
         return data;

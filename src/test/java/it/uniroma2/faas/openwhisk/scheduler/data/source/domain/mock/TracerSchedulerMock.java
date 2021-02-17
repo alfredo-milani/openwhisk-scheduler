@@ -5,6 +5,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ActivationEvent;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.advanced.ITraceable;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
 import org.apache.logging.log4j.LogManager;
@@ -13,12 +14,15 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.EventKafkaConsumerMock.EVENT_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy.DEFAULT_PRIORITY;
+import static java.util.stream.Collectors.toCollection;
 
 /**
  * This class add functionality to base scheduler, tracing all actions generated
@@ -37,7 +41,8 @@ public class TracerSchedulerMock extends AdvancedScheduler {
     private long runningCompositionTimeLimitMs = RUNNING_COMPOSITION_TIME_LIMIT_MS;
     // see@ https://stackoverflow.com/questions/14148331/how-to-get-a-hashmap-value-with-three-values
     // represent the state of currently active compositions - <PrimaryActivationID, <Priority, Timestamp>>
-    private final Map<String, Map.Entry<Integer, Long>> compositionsMap = new HashMap<>();
+    // using ConcurrentHashMap is sufficient to ensure correctness even if there are two threads operating on it
+    private final Map<String, Map.Entry<Integer, Long>> compositionsMap = new ConcurrentHashMap<>();
 
     public TracerSchedulerMock(@Nonnull Scheduler scheduler) {
         super(scheduler);
@@ -83,10 +88,34 @@ public class TracerSchedulerMock extends AdvancedScheduler {
                         .map(ITraceable.class::cast)
                         .filter(t -> t.getCause() != null)
                         .count();
-                LOG.trace("Received {} components activations.",
+                LOG.trace("Received {} objects associated with compositions.",
                         activationsCountFromComposition);
-                traceCompositions(dataList);
+                synchronized (mutex) {
+                    traceCompositions(dataList);
+                }
             }
+        } else if (stream.equals(EVENT_STREAM)) {
+            final Collection<ActivationEvent> activationEvents = data.stream()
+                    .filter(ActivationEvent.class::isInstance)
+                    .map(ActivationEvent.class::cast)
+                    .filter(e -> e.getBody().getConductor())
+                    .filter(e -> e.getBody().getActivationId() != null)
+                    .collect(toCollection(ArrayDeque::new));
+            LOG.trace("[CMP] - Processing {} completion objects (over {} received).",
+                    activationEvents.size(), data.size());
+
+            if (activationEvents.size() > 0) {
+                synchronized (mutex) {
+                    final int sizeBeforeUpdate = compositionsMap.size();
+                    activationEvents.forEach(e -> compositionsMap.remove(e.getBody().getActivationId()));
+                    final int sizeAfterUpdate = compositionsMap.size();
+                    if (sizeBeforeUpdate > sizeAfterUpdate) {
+                        LOG.trace("Removed {} activations from compositions map (actual size: {}).",
+                                sizeBeforeUpdate - sizeAfterUpdate, sizeAfterUpdate);
+                    }
+                }
+            }
+            return;
         }
 
         super.newEvent(stream, dataList);
@@ -104,40 +133,37 @@ public class TracerSchedulerMock extends AdvancedScheduler {
 
         // traceable objects are not filtered before to maintain an order list
         ListIterator<?> listIterator = data.listIterator();
-        synchronized (mutex) {
-            while (listIterator.hasNext()) {
-                final Object datum = listIterator.next();
-                if (datum instanceof ITraceable) {
-                    final ITraceable traceable = (ITraceable) datum;
-                    // if cause is not null current activation belongs to a composition
-                    if (traceable.getCause() != null) {
-                        final int traceablePriority = traceable.getPriority() == null
-                                ? DEFAULT_PRIORITY
-                                : traceable.getPriority();
-                        final Map.Entry<Integer, Long> priorityTimestampEntry =
-                                compositionsMap.get(traceable.getCause());
-                        // create new entry
-                        if (priorityTimestampEntry == null) {
-                            compositionsMap.put(
-                                    traceable.getCause(),
-                                    new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
-                            );
-                            LOG.trace("Registered new primary activation with id {} - priority {}.",
-                                    traceable.getCause(), traceablePriority);
-                            // check if current activation has wrong priority
-                        } else {
-                            final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
-                            // if priority does not match, create new object with correct priority
-                            if (priorityFromCompositionMap != traceablePriority) {
-                                LOG.trace("Updating to priority level {} associated with cause {}, for activation with id {}",
-                                        priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
-                                Activation a = traceable.with(priorityFromCompositionMap);
-                                listIterator.set(traceable.with(priorityFromCompositionMap));
-                            }
+        while (listIterator.hasNext()) {
+            final Object datum = listIterator.next();
+            if (datum instanceof ITraceable) {
+                final ITraceable traceable = (ITraceable) datum;
+                // if cause is not null current activation belongs to a composition
+                if (traceable.getCause() != null) {
+                    final int traceablePriority = traceable.getPriority() == null
+                            ? DEFAULT_PRIORITY
+                            : traceable.getPriority();
+                    final Map.Entry<Integer, Long> priorityTimestampEntry =
+                            compositionsMap.get(traceable.getCause());
+                    // create new entry
+                    if (priorityTimestampEntry == null) {
+                        compositionsMap.put(
+                                traceable.getCause(),
+                                new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
+                        );
+                        LOG.trace("Registered new primary activation with id {} - priority {}.",
+                                traceable.getCause(), traceablePriority);
+                        // check if current activation has wrong priority
+                    } else {
+                        final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
+                        // if priority does not match, create new object with correct priority
+                        if (priorityFromCompositionMap != traceablePriority) {
+                            LOG.trace("Updating to priority level {} associated with cause {}, for activation with id {}",
+                                    priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
+                            listIterator.set(traceable.with(priorityFromCompositionMap));
                         }
                     }
-                    // otherwise probably the activation received does not belongs to a composition
                 }
+                // otherwise probably the activation received does not belongs to a composition
             }
         }
     }
@@ -147,14 +173,14 @@ public class TracerSchedulerMock extends AdvancedScheduler {
      */
     private void removeOldEntries(long delta) {
         checkArgument(delta >= 0, "Delta time must be >= 0.");
-        long now = Instant.now().toEpochMilli();
+        final long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
-            int sizeBeforeUpdate = compositionsMap.size();
+            final int sizeBeforeUpdate = compositionsMap.size();
             compositionsMap.values().removeIf(entry -> now - entry.getValue() > delta);
-            int sizeAfterUpdate = compositionsMap.size();
-            if (sizeBeforeUpdate != sizeAfterUpdate) {
-                LOG.trace("Removed {} activations from compositions map (time delta - {} ms).",
-                        sizeBeforeUpdate - sizeAfterUpdate, delta);
+            final int sizeAfterUpdate = compositionsMap.size();
+            if (sizeBeforeUpdate > sizeAfterUpdate) {
+                LOG.trace("Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
+                        sizeBeforeUpdate - sizeAfterUpdate, sizeAfterUpdate, delta);
             }
         }
     }

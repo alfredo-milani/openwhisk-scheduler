@@ -11,9 +11,9 @@ whisk:
     # default 60
     actionsInvokesPerminute: 5000
     # default 30
-    actionsInvokesConcurrent: 500
+    actionsInvokesConcurrent: 5000
     # default 60
-    triggersFiresPerminute: 200
+    triggersFiresPerminute: 2000
     # default 50
     actionsSequenceMaxlength: 70
     actions:

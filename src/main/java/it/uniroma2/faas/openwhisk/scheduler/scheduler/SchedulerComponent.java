@@ -1,6 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
@@ -43,6 +44,7 @@ public class SchedulerComponent {
 
     public static final String SCHEDULER_TOPIC = "scheduler";
     public static final String HEALTH_TOPIC = "health";
+    public static final String EVENTS_TOPIC = "events";
 
     private final Config config;
 
@@ -85,7 +87,7 @@ public class SchedulerComponent {
         // TODO: implement custom executor service to restart threads in case of crash
         //   see@ https://aozturk.medium.com/how-to-handle-uncaught-exceptions-in-java-abf819347906
         // create global app executors
-        final SchedulerExecutors executors = new SchedulerExecutors(0, 2);
+        final SchedulerExecutors executors = new SchedulerExecutors(0, 3);
 
         // entities
         final List<Callable<String>> dataSourceConsumers = new ArrayList<>();
@@ -151,6 +153,13 @@ public class SchedulerComponent {
         if (config.getSchedulerTracer()) {
             scheduler = new TracerScheduler(scheduler);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
+            // register events kafka consumer
+            final EventKafkaConsumer eventKafkaConsumer = new EventKafkaConsumer(
+                    List.of(EVENTS_TOPIC), kafkaConsumerProperties, 500
+            );
+            eventKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(eventKafkaConsumer);
+            closeables.add(eventKafkaConsumer);
         }
         final Scheduler finalScheduler = scheduler;
 
