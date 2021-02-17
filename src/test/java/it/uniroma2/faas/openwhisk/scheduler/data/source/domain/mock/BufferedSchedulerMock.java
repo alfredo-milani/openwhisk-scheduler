@@ -2,8 +2,8 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferizable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker;

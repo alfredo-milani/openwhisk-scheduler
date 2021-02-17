@@ -1,7 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

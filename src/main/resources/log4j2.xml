@@ -47,7 +47,7 @@
             <AppenderRef level="ALL" ref="ConsoleAppender"/>
         </Logger>
 
-        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler" additivity="false">
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler" additivity="false">
             <AppenderRef level="ALL" ref="ConsoleAppender"/>
         </Logger>
     </Loggers>

@@ -5,7 +5,6 @@ import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.Ev
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config.Config;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
