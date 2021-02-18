@@ -67,38 +67,30 @@ public class TracerScheduler extends AdvancedScheduler {
         checkNotNull(data, "Data can not be null.");
 
         // using wildcard, without filtering ISchedulable objects, to maintain all
-        //   objects types in the list
+        //   objects types in the list ordered
         // will be traced only ITraceable objects
         final List<?> dataList = new ArrayList<>(data);
         if (stream.equals(ACTIVATION_STREAM)) {
             // counting traceable objects
             final long traceablesCount = dataList.stream()
                     .filter(ITraceable.class::isInstance)
+                    .map(ITraceable.class::cast)
+                    .filter(t -> t.getCause() != null)
                     .count();
             LOG.trace("[TRC] - Processing {} traceables objects (over {} received).",
                     traceablesCount, data.size());
 
-            if (traceablesCount > 0) {
-                final long activationsCountFromComposition = dataList.stream()
-                        .filter(ITraceable.class::isInstance)
-                        .map(ITraceable.class::cast)
-                        .filter(t -> t.getCause() != null)
-                        .count();
-                LOG.trace("Received {} objects associated with compositions.",
-                    activationsCountFromComposition);
-                traceCompositions(dataList);
-            }
+            if (traceablesCount > 0) traceCompositions(dataList);
         } else if (stream.equals(EVENT_STREAM)) {
             final Collection<ActivationEvent> activationEvents = data.stream()
                     .filter(ActivationEvent.class::isInstance)
                     .map(ActivationEvent.class::cast)
                     .filter(e -> e.getBody().getConductor())
-                    .filter(e -> e.getBody().getActivationId() != null)
                     .collect(toCollection(ArrayDeque::new));
-            LOG.trace("[CMP] - Processing {} completion objects (over {} received).",
+            LOG.trace("[EVT] - Processing {} events objects (over {} received).",
                     activationEvents.size(), data.size());
 
-            if (activationEvents.size() > 0) {
+            if (!activationEvents.isEmpty()) {
                 synchronized (mutex) {
                     final int sizeBeforeUpdate = compositionsMap.size();
                     activationEvents.forEach(e -> compositionsMap.remove(e.getBody().getActivationId()));
@@ -109,6 +101,7 @@ public class TracerScheduler extends AdvancedScheduler {
                     }
                 }
             }
+            // do not propagate event stream
             return;
         }
 
@@ -145,15 +138,15 @@ public class TracerScheduler extends AdvancedScheduler {
                                     traceable.getCause(),
                                     new AbstractMap.SimpleImmutableEntry<>(traceablePriority, Instant.now().toEpochMilli())
                             );
-                            LOG.trace("Registered new primary activation with id {} - priority {}.",
-                                    traceable.getCause(), traceablePriority);
-                            // check if current activation has wrong priority
+                            LOG.trace("Registered new cause {} - priority {} (actual size: {}).",
+                                    traceable.getCause(), traceablePriority, compositionsMap.size());
+                        // check if current activation has wrong priority
                         } else {
                             final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
                             // if priority does not match, create new object with correct priority
                             if (priorityFromCompositionMap != traceablePriority) {
-                                LOG.trace("Updating to priority level {} associated with cause {}, for activation with id {}",
-                                        priorityFromCompositionMap, traceable.getCause(), traceable.getActivationId());
+                                LOG.trace("Updating activation with id {} to priority level {} - cause {}.",
+                                        traceable.getActivationId(), priorityFromCompositionMap, traceable.getCause());
                                 listIterator.set(traceable.with(priorityFromCompositionMap));
                             }
                         }

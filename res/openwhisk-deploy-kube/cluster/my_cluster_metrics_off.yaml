@@ -55,7 +55,7 @@ metrics:
   # accessing Prometheus using port forwarding: $ kubectl port-forward svc/owdev-prometheus-server 9090:9090 --namespace openwhisk
   prometheusEnabled: false
   # enable user metrics
-  userMetricsEnabled: false
+  userMetricsEnabled: true
   # the dashboard can be accessed here: https://<whisk.ingress.apiHostName>:<whisk.ingress.apiHostPort>/monitoring/dashboards
 
 # grafana:
@@ -78,7 +78,7 @@ scheduler:
   host: null
   # policy: pass_through
   policy: priority_queue_fifo
-  tracing: false
+  tracing: true
   buffering: true
   pollIntervalMs: "50"
   fetchMinBytes: "1"
