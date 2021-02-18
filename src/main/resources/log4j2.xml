@@ -31,6 +31,10 @@
             <AppenderRef level="OFF" ref="ConsoleAppender"/>
         </Logger>
 
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer" additivity="false">
+            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+        </Logger>
+
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer" additivity="false">
             <AppenderRef level="OFF" ref="ConsoleAppender"/>
         </Logger>
