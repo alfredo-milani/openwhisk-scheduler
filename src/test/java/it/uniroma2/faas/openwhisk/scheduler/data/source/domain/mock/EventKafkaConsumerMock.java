@@ -62,7 +62,7 @@ public class EventKafkaConsumerMock extends AbstractKafkaConsumer<Event> {
     @Override
     public @Nullable Collection<Event> consume() {
         try {
-            TimeUnit.SECONDS.sleep(4);
+            TimeUnit.SECONDS.sleep(400);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

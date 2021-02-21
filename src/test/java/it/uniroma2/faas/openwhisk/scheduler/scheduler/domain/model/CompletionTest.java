@@ -1,9 +1,22 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
+import static java.util.stream.Collectors.toList;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class CompletionTest {
 
@@ -25,6 +38,47 @@ public class CompletionTest {
 
         assertDoesNotThrow(() -> System.out.println(
                 objectMapper.readValue(blockingCompletionRecordFromComposition, BlockingCompletion.class)));
+    }
+
+    @Test
+    public void isSchedulerDurationAlwaysLowerEqualThanWaitTime() throws IOException {
+        final String filename = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/domain/completed0.txt";
+        final ObjectMapper objectMapper = new ObjectMapper();
+        final Collection<BlockingCompletion> completions;
+
+        try (final Stream<String> stream = Files.lines(Paths.get(filename))) {
+            completions = stream
+                    .map(s -> {
+                        try {
+                            return objectMapper.readValue(s, BlockingCompletion.class);
+                        } catch (JsonProcessingException e0) {
+                            e0.printStackTrace();
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
+
+        final List<Integer> waitTimeCompletions = completions.stream()
+                .map(completion -> completion.getResponse().getAnnotations())
+                .flatMap(annotationList -> annotationList.stream()
+                        .filter(annotation -> annotation.get("key").equals("waitTime"))
+                        .map(waitTime -> (Integer) waitTime.get("value"))
+                )
+                .filter(Objects::nonNull)
+                .collect(toList());
+        final List<Integer> schedulerDurationCompletions = completions.stream()
+                .map(completion -> completion.getResponse().getResult().getResult().get("$scheduler"))
+                .map(scheduler -> ((Map<String, Integer>) scheduler).get("duration"))
+                .collect(toList());
+
+        assertEquals(completions.size(), waitTimeCompletions.size(), "Wait time annotations must be equals to completions number.");
+        assertEquals(completions.size(), schedulerDurationCompletions.size(), "Scheduler duration objects must be equals to completions number.");
+
+        IntStream.range(0, completions.size())
+                .forEach( i -> assertTrue(waitTimeCompletions.get(i) >= schedulerDurationCompletions.get(i),
+                        String.format("Wait time %d is not >= to %d.", waitTimeCompletions.get(i), schedulerDurationCompletions.get(i))));
     }
 
 }

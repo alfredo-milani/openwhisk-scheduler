@@ -41,18 +41,24 @@ COMMAND
     help | HELP | -h | -H | --help | --HELP
         Print this help message.
     ow
-        dashboard
+        dashboard arg
             Open Grafa dashboard on browser.
-        forwarding
+            arg value not used.
+        forwarding arg
             Enabling port forwarding for Prometheus (in case Grafana does not show any data).
-        install
+            arg value not used.
+        install arg
             Install Apache OpenWhisk on Kubernetes cluster.
-        uninstall
+            arg value can be 'e' to enable metrics or 'd' to disable metrics.
+        uninstall arg
             Uninstall Apache OpenWhisk from Kubernetes cluster.
-        upgrade
+            arg value not used.
+        upgrade arg
             Upgrade Apache OpenWhisk installation with new configuration.
-        wa
+            arg value can be 'e' to enable metrics or 'd' to disable metrics.
+        wa arg
             Watch Kubernetes pods on 'openwhisk' namespace.
+            arg value not used.
 
     query
         rest function data
@@ -161,12 +167,14 @@ parse_deploy_input() {
 # Args:
 # {1} [mnd]: action to perform
 parse_ow_input() {
-    if [[ -z "${1}" ]]; then
-        _error "Missing first positional argument requires."
+    local -r command="${1}"
+    local -r arg="${2}"
+    if [[ -z "${command}" || -z "${arg}" ]]; then
+        _error "Missing first or second positional arguments required."
         return 1
     fi
 
-    case "${1}" in
+    case "${command}" in
         dashboard )
             _info "Opening Grafana dashboard at \"https://localhost:31001/monitoring/dashboards\"."
             open https://localhost:31001/monitoring/dashboards
@@ -182,12 +190,15 @@ parse_ow_input() {
             kc label nodes --all openwhisk-role=invoker
 
             _info "Installing openwhisk application using Helm."
-            # helm install owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
-            #     -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics_off.yaml.yaml"
-
-            _info "Metrics not enabled."
-            helm install owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
-                -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics_off.yaml"
+            if [[ "${arg}" == "e" ]]; then
+                _info "Metrics enabled."
+                helm install owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
+                    -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics.yaml"
+            elif [[ "${arg}" == "d" ]]; then
+                _info "Metrics not enabled."
+                helm install owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
+                    -n openwhisk --create-namespace -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster.yaml"
+            fi            
             ;;
 
         uninstall )
@@ -197,8 +208,15 @@ parse_ow_input() {
 
         upgrade )
             _info "Upgrading only controller pods."
-            helm upgrade owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
-                -n openwhisk -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics_off.yaml"
+            if [[ "${arg}" == "e" ]]; then
+                _info "Metrics enabled."
+                helm upgrade owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
+                    -n openwhisk -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster_metrics.yaml"
+            elif [[ "${arg}" == "d" ]]; then
+                _info "Metrics not enabled."
+                helm upgrade owdev "${RES_ROOT}/openwhisk-deploy-kube/helm/openwhisk" \
+                    -n openwhisk -f "${RES_ROOT}/openwhisk-deploy-kube/cluster/my_cluster.yaml"
+            fi
             ;;
 
         wa )
@@ -364,7 +382,8 @@ parse_input() {
 
             ow )
                 shift
-                parse_ow_input "${1}" || return ${?}
+                parse_ow_input "${1}" "${2}" || return ${?}
+                shift
                 shift
                 ;;
 

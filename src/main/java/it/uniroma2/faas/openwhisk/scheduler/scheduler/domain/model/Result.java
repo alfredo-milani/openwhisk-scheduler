@@ -8,29 +8,29 @@ import java.util.Map;
 public class Result {
 
     /*
-    {
-    "response": {
-          "result": {
-            "input": {
-              "$scheduler": {
-                "limits": {
-                  "concurrency": 10,
-                  "memory": 256,
-                  "timeout": 60000
-                },
-                "target": "invoker0"
-              },
-              "scheduler": {
-                "priority": 0,
-                "target": "invoker0"
-              },
-              "test": 10000
-            }
-          },
-          "size": 163,
-          "statusCode": 0
-        }
-     }
+     * {
+     *   "response": {
+     *     "result": {
+     *       "input": {
+     *         "$scheduler": {
+     *           "limits": {
+     *             "concurrency": 10,
+     *             "memory": 256,
+     *             "timeout": 60000
+     *           },
+     *           "target": "invoker0"
+     *         },
+     *         "scheduler": {
+     *           "priority": 0,
+     *           "target": "invoker0"
+     *         },
+     *         "test": 10000
+     *       }
+     *     },
+     *     "size": 163,
+     *     "statusCode": 0
+     *   }
+     * }
      */
 
     private final Map<String, Object> result;

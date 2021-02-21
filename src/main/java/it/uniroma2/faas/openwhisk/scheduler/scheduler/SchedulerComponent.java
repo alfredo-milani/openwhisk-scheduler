@@ -65,7 +65,7 @@ public class SchedulerComponent {
         // current implementation using shutdownHook="disable" in configuration file resources/log4j2.xml
 
         // see@ https://stackoverflow.com/questions/23434252/programmatically-change-log-level-in-log4j2/23846361
-        Level level = Level.toLevel(config.getSysLog(), Level.INFO);
+        final Level level = Level.toLevel(config.getSysLog(), Level.INFO);
         Configurator.setAllLevels(LOG.getName(), level);
         Configurator.setRootLevel(level);
 

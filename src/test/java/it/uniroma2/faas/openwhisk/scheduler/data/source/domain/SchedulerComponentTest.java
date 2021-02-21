@@ -88,13 +88,13 @@ public class SchedulerComponentTest {
         final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
-        boolean tracerSchedulerOption = true;
+        boolean tracerSchedulerOption = false;
         boolean bufferedSchedulerOption = true;
         boolean healthScheckerSchedulerOption = false;
         if (bufferedSchedulerOption) {
             scheduler = new BufferedSchedulerMock(policy, activationsKafkaProducer);
             ((BufferedSchedulerMock) scheduler).setKafkaBootstrapServers("localhost:9092");
-            LOG.trace("Enabled scheduler functionlity - {}.", scheduler.getClass().getSimpleName());
+            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
             );

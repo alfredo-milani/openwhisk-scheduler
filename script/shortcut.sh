@@ -1,7 +1,9 @@
 #
 alias launcher="$(realpath "$(dirname "${BASH_SOURCE}")")/launcher.sh"  # @doc: Shortcut for launcher.sh script
 #
-alias launcher-inst='launcher ow install && launcher ow wa'  # @doc: Install openwhisk using launcher command
+alias launcher-inst='launcher ow install d && launcher ow wa none'  # @doc: Install openwhisk using launcher command and disabling metrics
+#
+alias launcher-inst-metrics='launcher ow install e && launcher ow wa none'  # @doc: Install openwhisk using launcher command and enabling metrics
 #
 alias launcher-uninst='launcher ow uninstall'  # @doc: Uninstall openwhisk instation using launcher command
 #

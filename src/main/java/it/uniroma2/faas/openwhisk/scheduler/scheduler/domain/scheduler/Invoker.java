@@ -31,6 +31,10 @@ public class Invoker {
     // OPTIMIZE: use ConcurrentHasMap
     // <ActionID, ContainerAction>
     // this variable maps unique string representing an action container with its implementation
+    // TODO: to manage stem-cells (pre-warmed containers) modify apache OpenWhisk Controller component
+    //   to insert "kind" field inside activation records sent to "scheduler" topic; also it is required
+    //   to implement a mechanism to retrieve stem-cells configuration per-runtime, depending on the
+    //   deploy of the framework
     private final Map<String, ContainerAction> actionContainerMap;
     // OPTIMIZE: use ConcurrentHashMap
     // <ActivationID, <ContainerAction, timestamp>>

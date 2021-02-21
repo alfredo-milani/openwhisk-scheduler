@@ -8,9 +8,9 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.stream.Collectors.toUnmodifiableList;
 
 public class FilterScheduler extends AdvancedScheduler {
 
@@ -29,10 +29,10 @@ public class FilterScheduler extends AdvancedScheduler {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
-        Collection<ISchedulable> schedulables = data.stream()
+        final Collection<ISchedulable> schedulables = data.stream()
                 .filter(filter::isInstance)
                 .map(filter::cast)
-                .collect(Collectors.toUnmodifiableList());
+                .collect(toUnmodifiableList());
         if (schedulables.size() != data.size()) {
             LOG.trace("Filtered {} element.", data.size() - schedulables.size());
         }

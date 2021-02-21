@@ -8,51 +8,56 @@
             <!--<PatternLayout pattern="[%-5p] | %d{dd-MM-yyyy HH:mm:ss} | [%t] %C{6} (%F:%L) - %m%n"/>-->
             <PatternLayout pattern="[%-5p] | %d{dd-MM-yyyy HH:mm:ss} | [%t] (%F:%L) - %m%n"/>
         </Console>
+
+        <!-- Async Loggers will auto-flash in batches, so switch off immediateFlush -->
+        <RandomAccessFile name="RandomAccessFile" fileName="/var/log/scheduler.log" immediateFlush="false" append="false">
+            <PatternLayout pattern="[%-5p] | %d{dd-MM-yyyy HH:mm:ss} | [%t] (%F:%L) - %m%n"/>
+        </RandomAccessFile>
     </Appenders>
 
     <Loggers>
         <Root level="INFO" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+            <AppenderRef level="ALL" ref="RandomAccessFile"/>
         </Root>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.AbstractKafkaConsumer" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PriorityQueueFIFOPolicy" additivity="false">
-            <AppenderRef level="OFF" ref="ConsoleAppender"/>
+            <AppenderRef level="OFF" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BaseScheduler" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+            <AppenderRef level="ALL" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+            <AppenderRef level="ALL" ref="RandomAccessFile"/>
         </Logger>
 
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler" additivity="false">
-            <AppenderRef level="ALL" ref="ConsoleAppender"/>
+            <AppenderRef level="ALL" ref="RandomAccessFile"/>
         </Logger>
     </Loggers>
 

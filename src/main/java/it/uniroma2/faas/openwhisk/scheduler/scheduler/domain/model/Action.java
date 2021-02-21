@@ -8,11 +8,13 @@ import java.util.Objects;
 public class Action {
 
     /*
-    "action":{
-          "name":"test_annotations",
-          "path":"guest",
-          "version":"0.0.1"
-       },
+     * {
+     *   "action": {
+     *     "name": "test_annotations",
+     *     "path": "guest",
+     *     "version": "0.0.1"
+     *   }
+     * }
      */
 
     private final String name;
