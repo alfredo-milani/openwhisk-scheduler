@@ -27,9 +27,9 @@ public final class NonBlockingCompletion extends Completion {
     private final String activationId;
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public NonBlockingCompletion(@JsonProperty("activationId") String activationId, @JsonProperty("instance") Instance instance,
+    public NonBlockingCompletion(@JsonProperty("activationId") String activationId, @JsonProperty("instance") InvokerInstance invokerInstance,
                                  @JsonProperty("isSystemError") Boolean systemError, @JsonProperty("transid") TransId transId) {
-        super(instance, systemError, transId);
+        super(invokerInstance, systemError, transId);
         this.activationId = activationId;
     }
 

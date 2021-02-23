@@ -100,4 +100,8 @@ spec:
           # Kafka properties
           - name: "KAFKA_HOSTS"
             value: "{{ include "openwhisk.kafka_connect" . }}"
+            
+          # action runtimes
+          - name: "RUNTIMES_MANIFEST"
+            value: {{ template "openwhisk.runtimes_manifest" . }}
 {{ end }}

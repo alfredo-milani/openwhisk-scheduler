@@ -126,22 +126,22 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
             e.printStackTrace();
         }*/
 
-        /*for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 5; ++i) {
             final String record = lineReader.poll();
             try {
                 data.add(objectMapper.readValue(record, Activation.class));
             } catch (JsonProcessingException e) {
                 LOG.warn("Exception parsing Activation from record: {}.", record);
             }
-        }*/
+        }
 
-        try {
+        /*try {
             if (!activationCompositionQueue.isEmpty())
                 data.add(objectMapper.readValue(activationCompositionQueue.poll(), Activation.class));
         } catch (JsonProcessingException e) {
             LOG.warn("Exception parsing Activation from record.");
             e.printStackTrace();
-        }
+        }*/
 
         /*for (int i = 0; i < 10; ++i) {
             try {

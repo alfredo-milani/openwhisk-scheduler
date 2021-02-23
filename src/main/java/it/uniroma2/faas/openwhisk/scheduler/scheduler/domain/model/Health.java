@@ -20,15 +20,15 @@ public final class Health implements IConsumable {
      * }
      */
 
-    private final Instance instance;
+    private final InvokerInstance invokerInstance;
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public Health(@JsonProperty("name") Instance instance) {
-        this.instance = instance;
+    public Health(@JsonProperty("name") InvokerInstance invokerInstance) {
+        this.invokerInstance = invokerInstance;
     }
 
-    public Instance getInstance() {
-        return instance;
+    public InvokerInstance getInstance() {
+        return invokerInstance;
     }
 
     @Override
@@ -36,18 +36,18 @@ public final class Health implements IConsumable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Health health = (Health) o;
-        return Objects.equals(instance, health.instance);
+        return Objects.equals(invokerInstance, health.invokerInstance);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(instance);
+        return Objects.hash(invokerInstance);
     }
 
     @Override
     public String toString() {
         return "Health{" +
-                "componentInstance=" + instance +
+                "componentInstance=" + invokerInstance +
                 '}';
     }
 

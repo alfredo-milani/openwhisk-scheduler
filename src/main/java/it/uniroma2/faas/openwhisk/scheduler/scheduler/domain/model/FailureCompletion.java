@@ -25,9 +25,9 @@ public final class FailureCompletion extends Completion {
 
     private final String response;
 
-    public FailureCompletion(@JsonProperty("instance") Instance instance, @JsonProperty("isSystemError") Boolean systemError,
+    public FailureCompletion(@JsonProperty("instance") InvokerInstance invokerInstance, @JsonProperty("isSystemError") Boolean systemError,
                              @JsonProperty("transid") TransId transId, @JsonProperty("response") String response) {
-        super(instance, systemError, transId);
+        super(invokerInstance, systemError, transId);
         this.response = response;
     }
 

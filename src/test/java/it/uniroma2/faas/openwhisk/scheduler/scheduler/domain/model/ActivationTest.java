@@ -81,7 +81,7 @@ public class ActivationTest {
                 new ArrayList<>(),
                 new HashMap<>(),
                 null,
-                new RootControllerIndex("0", RootControllerIndex.InstanceType.CONTROLLER),
+                new RootControllerIndex("0", "controller"),
                 new TransId(new ArrayList<>(1) {{
                     add(new Transaction("sid_invokerHealth", 1613230826360L));
                 }}),
@@ -113,7 +113,7 @@ public class ActivationTest {
                 new ArrayList<>(),
                 new HashMap<>(),
                 null,
-                new RootControllerIndex("0", RootControllerIndex.InstanceType.CONTROLLER),
+                new RootControllerIndex("0", "controller"),
                 new TransId(new ArrayList<>(1) {{
                     add(new Transaction("sid_invokerHealth", 1613230826360L));
                 }}),

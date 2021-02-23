@@ -211,6 +211,7 @@ public final class Activation implements ITraceable, IBufferizable {
     public static final String K_SCHEDULER_PRIORITY = "priority";
     public static final String K_SCHEDULER_DURATION = "duration";
     public static final String K_SCHEDULER_OVERLOAD = "overload";
+    public static final String K_SCHEDULER_KIND = "kind";
     public static final String K_SCHEDULER_LIMITS = "limits";
     public static final String K_SCHEDULER_LIMITS_CONCURRENCY = "concurrency";
     public static final String K_SCHEDULER_LIMITS_MEMORY = "memory";
@@ -237,6 +238,8 @@ public final class Activation implements ITraceable, IBufferizable {
     private final long creationTimestamp;
     // indicate invoker overloading
     private final Boolean overload;
+    // action runtime description
+    private final String kind;
     // limits for current activation
     private final Long concurrencyLimit;
     private final Long memoryLimit;
@@ -266,6 +269,7 @@ public final class Activation implements ITraceable, IBufferizable {
         String targetInvoker = null;
         Integer priority = null;
         Boolean overload = null;
+        String kind = null;
         Long concurrencyLimit = null;
         Long memoryLimit = null;
         Long timeLimit = null;
@@ -280,6 +284,7 @@ public final class Activation implements ITraceable, IBufferizable {
                 Number priorityNumber = (Number) scheduler.get(K_SCHEDULER_PRIORITY);
                 if (priorityNumber != null) priority = priorityNumber.intValue();
                 overload = (Boolean) scheduler.get(K_SCHEDULER_OVERLOAD);
+                kind = (String) scheduler.get(K_SCHEDULER_KIND);
                 Map<String, Object> limits = (Map<String, Object>) scheduler.get(K_SCHEDULER_LIMITS);
                 if (limits != null) {
                     Number concurrencyNumber = (Number) limits.get(K_SCHEDULER_LIMITS_CONCURRENCY);
@@ -297,6 +302,7 @@ public final class Activation implements ITraceable, IBufferizable {
         this.priority = priority;
         this.creationTimestamp = Instant.now().toEpochMilli();
         this.overload = overload;
+        this.kind = kind;
         this.concurrencyLimit = concurrencyLimit;
         this.memoryLimit = memoryLimit;
         this.timeLimit = timeLimit;
@@ -317,7 +323,7 @@ public final class Activation implements ITraceable, IBufferizable {
             content = new HashMap<>(this.content);
         }
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
-        Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
+        final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
         scheduler.put(K_SCHEDULER_PRIORITY, priority);
 
         return new Activation(
@@ -344,7 +350,7 @@ public final class Activation implements ITraceable, IBufferizable {
             content = new HashMap<>(this.content);
         }
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
-        Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
+        final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
         scheduler.putIfAbsent(K_SCHEDULER_DURATION, schedulingTermination - creationTimestamp);
 
         return new Activation(
@@ -357,6 +363,7 @@ public final class Activation implements ITraceable, IBufferizable {
         );
     }
 
+    @Override
     public Action getAction() {
         return action;
     }
@@ -391,6 +398,7 @@ public final class Activation implements ITraceable, IBufferizable {
         return revision;
     }
 
+    @Override
     public RootControllerIndex getRootControllerIndex() {
         return rootControllerIndex;
     }
@@ -428,21 +436,31 @@ public final class Activation implements ITraceable, IBufferizable {
     }
 
     @JsonIgnore
+    @Override
+    public @Nullable String getKind() {
+        return kind;
+    }
+
+    @JsonIgnore
+    @Override
     public Long getConcurrencyLimit() {
         return concurrencyLimit;
     }
 
     @JsonIgnore
+    @Override
     public Long getMemoryLimit() {
         return memoryLimit;
     }
 
     @JsonIgnore
+    @Override
     public Long getTimeLimit() {
         return timeLimit;
     }
 
     @JsonIgnore
+    @Override
     public Long getUserMemory() {
         return userMemory;
     }
@@ -453,12 +471,12 @@ public final class Activation implements ITraceable, IBufferizable {
         if (o == null || getClass() != o.getClass()) return false;
         Activation that = (Activation) o;
         return Objects.equals(action, that.action) && Objects.equals(activationId, that.activationId) &&
-                Objects.equals(revision, that.revision);
+                Objects.equals(revision, that.revision) && Objects.equals(kind, that.kind);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(action, activationId, revision);
+        return Objects.hash(action, activationId, revision, kind);
     }
 
     @Override
@@ -479,6 +497,7 @@ public final class Activation implements ITraceable, IBufferizable {
                 ", priority=" + priority +
                 ", creationTimestamp=" + creationTimestamp +
                 ", overload=" + overload +
+                ", kind='" + kind + '\'' +
                 ", concurrencyLimit=" + concurrencyLimit +
                 ", memoryLimit=" + memoryLimit +
                 ", timeLimit=" + timeLimit +

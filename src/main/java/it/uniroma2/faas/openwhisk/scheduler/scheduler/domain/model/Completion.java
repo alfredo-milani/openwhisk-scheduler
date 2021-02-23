@@ -7,20 +7,20 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Completion implements IConsumable {
 
-    private final Instance instance;
+    private final InvokerInstance invokerInstance;
     private final Boolean systemError;
     private final TransId transId;
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public Completion(@JsonProperty("instance") Instance instance, @JsonProperty("isSystemError") Boolean systemError,
+    public Completion(@JsonProperty("instance") InvokerInstance invokerInstance, @JsonProperty("isSystemError") Boolean systemError,
                       @JsonProperty("transid") TransId transId) {
-        this.instance = instance;
+        this.invokerInstance = invokerInstance;
         this.systemError = systemError;
         this.transId = transId;
     }
 
-    public Instance getInstance() {
-        return instance;
+    public InvokerInstance getInstance() {
+        return invokerInstance;
     }
 
     public Boolean getSystemError() {
@@ -34,7 +34,7 @@ public class Completion implements IConsumable {
     @Override
     public String toString() {
         return "Completion{" +
-                ", instance=" + instance +
+                ", instance=" + invokerInstance +
                 ", systemError=" + systemError +
                 ", transId=" + transId +
                 '}';

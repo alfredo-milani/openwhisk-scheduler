@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import javax.annotation.Nonnull;
 import java.util.Objects;
 
-public class Instance {
+public class InvokerInstance {
 
     /*
      * {
@@ -44,10 +44,10 @@ public class Instance {
     }
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public Instance(@JsonProperty("instance") int instance,
-                    @JsonProperty("instanceType") Type instanceType,
-                    @JsonProperty("uniqueName") String uniqueName,
-                    @JsonProperty("userMemory") String userMemory) {
+    public InvokerInstance(@JsonProperty("instance") int instance,
+                           @JsonProperty("instanceType") Type instanceType,
+                           @JsonProperty("uniqueName") String uniqueName,
+                           @JsonProperty("userMemory") String userMemory) {
         this.instance = instance;
         this.instanceType = instanceType;
         this.uniqueName = uniqueName;
@@ -74,9 +74,9 @@ public class Instance {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Instance instance1 = (Instance) o;
-        return instance == instance1.instance && instanceType == instance1.instanceType &&
-                Objects.equals(uniqueName, instance1.uniqueName) && Objects.equals(userMemory, instance1.userMemory);
+        InvokerInstance invokerInstance1 = (InvokerInstance) o;
+        return instance == invokerInstance1.instance && instanceType == invokerInstance1.instanceType &&
+                Objects.equals(uniqueName, invokerInstance1.uniqueName) && Objects.equals(userMemory, invokerInstance1.userMemory);
     }
 
     @Override

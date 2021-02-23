@@ -76,7 +76,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     @Override
     public @Nullable Collection<Completion> consume() {
         try {
-            TimeUnit.SECONDS.sleep(400);
+            TimeUnit.SECONDS.sleep(4);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

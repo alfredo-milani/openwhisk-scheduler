@@ -34,8 +34,8 @@ public class BufferedScheduler extends Scheduler {
 
     private final static Logger LOG = LogManager.getLogger(BufferedScheduler.class.getCanonicalName());
 
-    public static final String TEMPLATE_COMPLETION_TOPIC = "completed%d";
-    public static final int THREAD_COUNT = 2;
+    public static final String TEMPLATE_COMPLETION_TOPIC = "completed%s";
+    public static final int THREAD_COUNT = 3;
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
     public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
@@ -60,9 +60,10 @@ public class BufferedScheduler extends Scheduler {
     // <targetInvoker, Buffer>
     // contains a mapping between an invoker id and its buffered activations
     private final Map<String, Queue<IBufferizable>> invokerBufferMap = new HashMap<>(24);
-    // <targetInvoker, CompletionKafkaConsumer>
-    // contains all completion Kafka consumer associated with healthy invokers
-    private final Map<String, CompletionKafkaConsumer> invokerCompletionConsumerMap = new HashMap<>(24);
+    // <controller, CompletionKafkaConsumer>
+    // contains all completion Kafka consumer associated with controllers
+    private final Map<RootControllerIndex, CompletionKafkaConsumer> controllerCompletionConsumerMap =
+            new HashMap<>(12);
     // default kafka properties for all completion Kafka consumers
     private final Properties kafkaConsumerProperties = new Properties() {{
         put(ConsumerConfig.GROUP_ID_CONFIG, "ow-scheduler-consumer");
@@ -124,6 +125,24 @@ public class BufferedScheduler extends Scheduler {
                     bufferizables.size(), data.size());
 
             if (bufferizables.size() > 0) {
+                // filter unique controller instance from activation record and check if there is yet
+                //   a completion kafka consumer, otherwise create it
+                // for now, created completion kafka consumers run indefinitely, without a mechanism to check
+                //   if there are still producer which publish on that topics, but it's ok
+                final Set<RootControllerIndex> controllers = bufferizables.stream()
+                        .map(IBufferizable::getRootControllerIndex)
+                        .filter(Objects::nonNull)
+                        .collect(toSet());
+                synchronized (mutex) {
+                    for (final RootControllerIndex controller : controllers) {
+                        // create new consumer for controller instance if it is not yet present
+                        if (!controllerCompletionConsumerMap.containsKey(controller)) {
+                            controllerCompletionConsumerMap.put(controller,
+                                    createCompletionConsumerFrom(controller.getAsString()));
+                        }
+                    }
+                }
+
                 // invocation queue
                 // add all invoker test action activations without acquiring any resource
                 // invoker health test action must always be processed, otherwise
@@ -189,8 +208,8 @@ public class BufferedScheduler extends Scheduler {
                             LOG.warn("Completion received does not have valid activationId.");
                             continue;
                         }
-                        final Invoker invoker = invokersMap.get(invokerTarget);
 
+                        final Invoker invoker = invokersMap.get(invokerTarget);
                         // there is no reference to this invoker in the system
                         if (invoker == null) continue;
 
@@ -249,23 +268,16 @@ public class BufferedScheduler extends Scheduler {
                             invokersMap.put(invokerTarget, newInvoker);
                             invoker = newInvoker;
                             LOG.trace("New invoker registered in the system: {}.", invokerTarget);
-                            // create new completion Kafka consumer
-                            // assign its value to null to create it later (in health checking phase)
-                            if (!invokerCompletionConsumerMap.containsKey(invokerTarget)) {
-                                invokerCompletionConsumerMap.put(invokerTarget,
-                                        createCompletionConsumerFrom(getInstanceFrom(invokerTarget)));
-                            }
                         }
 
                         // if invoker was already healthy, update its timestamp
                         if (invoker.isHealthy()) {
-                            invoker.setTimestamp(Instant.now().toEpochMilli());
+                            invoker.setLastCheck(Instant.now().toEpochMilli());
                         // invoker has become healthy
                         } else {
                             // upon receiving hearth-beat from invoker, mark that invoker as healthy
                             invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
                             LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
-
                             // add invoker to the set of invokers that have turned healthy
                             invokersTurnedHealthy.add(invokerTarget);
                         }
@@ -287,8 +299,8 @@ public class BufferedScheduler extends Scheduler {
     @Override
     public void shutdown() {
         synchronized (mutex) {
-            LOG.trace("Closing {} completion kafka consumers.", invokerCompletionConsumerMap.size());
-            invokerCompletionConsumerMap.values().forEach(CompletionKafkaConsumer::close);
+            LOG.trace("Closing {} completion kafka consumers.", controllerCompletionConsumerMap.size());
+            controllerCompletionConsumerMap.values().forEach(CompletionKafkaConsumer::close);
         }
         schedulerExecutors.shutdown();
         schedulerPeriodicExecutors.shutdown();
@@ -495,20 +507,13 @@ public class BufferedScheduler extends Scheduler {
                 // invoker already in offline state, so check next invoker
                 if (invoker.getState() == OFFLINE) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as offline
-                if (now - invoker.getTimestamp() > offlineCheck) {
+                if (now - invoker.getLastCheck() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
                     invoker.removeAllContainers();
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
                     // when invoker is marked as offline, release resources associated with it
                     invokerBufferMap.remove(invoker.getInvokerName());
-                    final CompletionKafkaConsumer completionKafkaConsumer =
-                            invokerCompletionConsumerMap.remove(invoker.getInvokerName());
-                    if (completionKafkaConsumer != null) {
-                        // OPTIMIZE: should Kafka consumer shutdown be placed
-                        //   outside synchronized block ?
-                        completionKafkaConsumer.close();
-                    }
                     // continue because if invoker is offline is also unhealthy
                     continue;
                 }
@@ -516,7 +521,7 @@ public class BufferedScheduler extends Scheduler {
                 // invoker already in unhealthy state, so check next invoker
                 if (invoker.getState() == UNHEALTHY) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getTimestamp() > healthCheck) {
+                if (now - invoker.getLastCheck() > healthCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(UNHEALTHY);
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
@@ -549,24 +554,8 @@ public class BufferedScheduler extends Scheduler {
                     delta, invokerOldActivationsMapTrace);
     }
 
-    private void checkIfCreateCompletionKafkaConsumers() {
-        synchronized (mutex) {
-            for (final String invokerTarget : invokersMap.keySet()) {
-                CompletionKafkaConsumer completionKafkaConsumer =
-                        invokerCompletionConsumerMap.get(invokerTarget);
-                // if there are completion Kafka consumers marked as null, they must be created
-                if (completionKafkaConsumer == null) {
-                    final int invokerInstance = getInstanceFrom(invokerTarget);
-                    // OPTIMIZE: should Kafka consumer creation be placed
-                    //   outside synchronized block ?
-                    invokerCompletionConsumerMap.put(invokerTarget,
-                            createCompletionConsumerFrom(invokerInstance));
-                }
-            }
-        }
-    }
-
-    private @Nonnull CompletionKafkaConsumer createCompletionConsumerFrom(int instance) {
+    private @Nonnull CompletionKafkaConsumer createCompletionConsumerFrom(@Nonnull String instance) {
+        checkNotNull(instance, "Instance can not be null.");
         final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
         LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
         final CompletionKafkaConsumer completionKafkaConsumer = new CompletionKafkaConsumer(
@@ -599,9 +588,9 @@ public class BufferedScheduler extends Scheduler {
         );
     }
 
-    public static @Nonnull String getInvokerTargetFrom(@Nonnull Instance instance) {
-        checkNotNull(instance, "Instance can not be null.");
-        return instance.getInstanceType().getName() + instance.getInstance();
+    public static @Nonnull String getInvokerTargetFrom(@Nonnull InvokerInstance invokerInstance) {
+        checkNotNull(invokerInstance, "Instance can not be null.");
+        return invokerInstance.getInstanceType().getName() + invokerInstance.getInstance();
     }
 
     public static int getInstanceFrom(@Nonnull String invokerTarget) {
@@ -618,12 +607,12 @@ public class BufferedScheduler extends Scheduler {
     /**
      * Return user-memory in MiB.
      *
-     * @param instance
+     * @param invokerInstance
      * @return
      */
-    public static long getUserMemoryFrom(@Nonnull Instance instance) {
-        checkNotNull(instance, "Instance can not be null.");
-        return Long.parseLong(instance.getUserMemory().split(" ")[0]) / (1024L * 1024L);
+    public static long getUserMemoryFrom(@Nonnull InvokerInstance invokerInstance) {
+        checkNotNull(invokerInstance, "Instance can not be null.");
+        return Long.parseLong(invokerInstance.getUserMemory().split(" ")[0]) / (1024L * 1024L);
     }
 
     public void setKafkaBootstrapServers(@Nonnull String kafkaBootstrapServers) {

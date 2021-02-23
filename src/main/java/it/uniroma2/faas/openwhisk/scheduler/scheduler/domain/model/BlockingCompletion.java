@@ -192,9 +192,9 @@ public final class BlockingCompletion extends Completion {
     private final Response response;
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
-    public BlockingCompletion(@JsonProperty("instance") Instance instance, @JsonProperty("isSystemError") Boolean systemError,
+    public BlockingCompletion(@JsonProperty("instance") InvokerInstance invokerInstance, @JsonProperty("isSystemError") Boolean systemError,
                               @JsonProperty("response") Response response, @JsonProperty("transid") TransId transId) {
-        super(instance, systemError, transId);
+        super(invokerInstance, systemError, transId);
         this.response = response;
     }
 

@@ -2,10 +2,25 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.RootControllerIndex;
 
 import javax.annotation.Nullable;
 
 public interface IBufferizable extends ISchedulable {
+
+    /**
+     * Return information about controller which has generated current activation record.
+     *
+     * @return {@link RootControllerIndex} which has generated current activation record.
+     */
+    @Nullable RootControllerIndex getRootControllerIndex();
+
+    /**
+     * Return information about action runtime.
+     *
+     * @return string representing action runtime.
+     */
+    @Nullable String getKind();
 
     /**
      * Return information about invoker overload.

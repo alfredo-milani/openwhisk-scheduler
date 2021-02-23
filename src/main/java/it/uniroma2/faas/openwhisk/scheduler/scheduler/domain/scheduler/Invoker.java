@@ -24,7 +24,7 @@ public class Invoker {
     public static final long DEFAULT_ACTIVATION_CONTAINER_CAPACITY = 128;
     public static final float DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR = 0.70f;
 
-    // invoker name
+    // invoker name, corresponding to invoker's activation topic
     private final String invokerName;
     // total memory on invoker node
     private final long userMemory;
@@ -46,8 +46,8 @@ public class Invoker {
     private long memory;
     // invoker state
     private State state = State.NOT_READY;
-    // last state update timestamp
-    private long timestamp = 0L;
+    // timestamp of last state update
+    private long lastCheck = 0L;
 
     // invoker's state
     public enum State {
@@ -227,14 +227,14 @@ public class Invoker {
     }
 
     public void updateState(@Nonnull State state) {
-        updateState(state, timestamp);
+        updateState(state, lastCheck);
     }
 
     public void updateState(@Nonnull State state, long timestamp) {
         checkNotNull(state, "State can not be null.");
-        checkArgument(timestamp >= 0 && timestamp >= this.timestamp,
-                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.timestamp);
-        this.timestamp = timestamp;
+        checkArgument(timestamp >= 0 && timestamp >= this.lastCheck,
+                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.lastCheck);
+        this.lastCheck = timestamp;
         this.state = state;
     }
 
@@ -246,14 +246,14 @@ public class Invoker {
         return state == State.HEALTHY;
     }
 
-    public long getTimestamp() {
-        return timestamp;
+    public long getLastCheck() {
+        return lastCheck;
     }
 
-    public void setTimestamp(long timestamp) {
-        checkArgument(timestamp >= 0 && timestamp >= this.timestamp,
-                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.timestamp);
-        this.timestamp = timestamp;
+    public void setLastCheck(long lastCheck) {
+        checkArgument(lastCheck >= 0 && lastCheck >= this.lastCheck,
+                "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.lastCheck);
+        this.lastCheck = lastCheck;
     }
 
     /**
@@ -288,7 +288,7 @@ public class Invoker {
                 ", activationContainerMap=" + activationContainerMap +
                 ", memory=" + memory +
                 ", state=" + state +
-                ", update=" + timestamp +
+                ", update=" + lastCheck +
                 '}';
     }
 
