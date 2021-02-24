@@ -364,25 +364,6 @@ public class BufferedScheduler extends Scheduler {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull List<String> invokers) {
-        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireResourcesForAll(invokers);
-        return invokerQueueMap.values().stream()
-                .flatMap(Queue::stream)
-                .collect(Collectors.toCollection(ArrayDeque::new));
-    }
-
-    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireResourcesForAll(@Nonnull List<String> invokers) {
-        checkNotNull(invokers, "Invokers list can not be null.");
-        final Map<String, Integer> invokerCountMap = new HashMap<>(invokers.size());
-        for (final String invoker : invokers) {
-            invokerCountMap.put(invoker, Integer.MAX_VALUE);
-        }
-        return pollAndAcquireAtMostResourcesForAll(invokerCountMap).entrySet().stream()
-                .filter(entry -> entry.getValue() != null)
-                .filter(entry -> !entry.getValue().isEmpty())
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
     private @Nonnull Queue<IBufferizable> pollAndAcquireAtMostResourcesForAllFlattened(@Nonnull Map<String, Integer> invokers) {
         final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireAtMostResourcesForAll(invokers);
         return invokerQueueMap.values().stream()
@@ -462,7 +443,7 @@ public class BufferedScheduler extends Scheduler {
                         return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "not enough resources");
                     } else {
                         return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-                                String.format("%s activations", entry.getValue().size()));
+                                entry.getValue().size() + " activations");
                     }
                 })
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));

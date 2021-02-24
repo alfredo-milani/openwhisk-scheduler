@@ -81,4 +81,17 @@ public class CompletionTest {
                         String.format("Wait time %d is not >= to %d.", waitTimeCompletions.get(i), schedulerDurationCompletions.get(i))));
     }
 
+    @Test
+    public void areErrorCompletionDeserializedCorrectly() {
+        final ObjectMapper objectMapper = new ObjectMapper();
+
+        final String errorInvokerHealthTestActionCompletionRecord = "{\"instance\": {\"instance\": 2, \"instanceType\": \"invoker\", \"uniqueName\": \"owdev-invoker-1\", \"userMemory\": \"2147483648 B\"}, \"isSystemError\": true, \"response\": \"ba418ba98c914fc7818ba98c916fc75b\", \"transid\": [\"sid_invokerHealth\", 1614175891255]}";
+        final String errorOnContainerImageCompletionRecord = "{\"instance\": {\"instance\": 0, \"instanceType\": \"invoker\", \"uniqueName\": \"owdev-invoker-2\", \"userMemory\": \"2147483648 B\"}, \"isSystemError\": true, \"response\": {\"activationId\": \"607d5b9094744892bd5b909474489267\", \"annotations\": [{\"key\": \"path\", \"value\": \"guest/sleep\"}, {\"key\": \"waitTime\", \"value\": 61609}, {\"key\": \"kind\", \"value\": \"python:3\"}, {\"key\": \"timeout\", \"value\": false}, {\"key\": \"limits\", \"value\": {\"concurrency\": 1, \"logs\": 10, \"memory\": 256, \"timeout\": 60000}}], \"duration\": 0, \"end\": 1614176278669, \"logs\": [], \"name\": \"sleep\", \"namespace\": \"guest\", \"publish\": false, \"response\": {\"result\": {\"error\": \"Failed to run container with image 'openwhisk/python3action:1.15.0'.\"}, \"statusCode\": 3}, \"start\": 1614176278669, \"subject\": \"guest\", \"version\": \"0.0.1\"}, \"transid\": [\"jIAernxDeXgY2nGon66c52qB5hP5OkMc\", 1614176217060]}";
+
+        assertDoesNotThrow(() -> System.out.println(
+                objectMapper.readValue(errorInvokerHealthTestActionCompletionRecord, FailureCompletion.class)));
+        assertDoesNotThrow(() -> System.out.println(
+                objectMapper.readValue(errorOnContainerImageCompletionRecord, BlockingCompletion.class)));
+    }
+
 }

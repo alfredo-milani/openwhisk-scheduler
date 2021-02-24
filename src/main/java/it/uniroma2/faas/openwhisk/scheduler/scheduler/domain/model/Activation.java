@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 // @JsonInclude(JsonInclude.Include.NON_NULL)
 public final class Activation implements ITraceable, IBufferizable {
@@ -352,6 +353,33 @@ public final class Activation implements ITraceable, IBufferizable {
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
         final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
         scheduler.putIfAbsent(K_SCHEDULER_DURATION, schedulingTermination - creationTimestamp);
+
+        return new Activation(
+                this.getAction(), this.getActivationId(),
+                this.isBlocking(), this.getCause(),
+                content, this.getInitArgs(),
+                this.getLockedArgs(), this.getRevision(),
+                this.getRootControllerIndex(), this.getTransId(),
+                this.getUser()
+        );
+    }
+
+    // TODO - implement deep copy
+    // Current implementation provides a shallow copy
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nonnull Activation with(@Nonnull String invokerTarget) {
+        checkNotNull(invokerTarget, "Invoker target can not be null.");
+
+        Map<String, Object> content;
+        if (this.content == null) {
+            content = new HashMap<>();
+        } else {
+            content = new HashMap<>(this.content);
+        }
+        content.putIfAbsent(K_SCHEDULER, new HashMap<>());
+        final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
+        scheduler.putIfAbsent(K_SCHEDULER_TARGET, invokerTarget);
 
         return new Activation(
                 this.getAction(), this.getActivationId(),

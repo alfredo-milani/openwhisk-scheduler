@@ -57,4 +57,13 @@ public interface ISchedulable extends IConsumable {
      */
     @Nonnull <T extends ISchedulable> T with(long schedulingDuration);
 
+    /**
+     * Create new {@link ISchedulable} object with selected invoker target.
+     *
+     * @param invokerTarget new invoker target for current activation record.
+     * @param <T> {@link ISchedulable} object.
+     * @return {@link ISchedulable} object.
+     */
+    @Nonnull <T extends ISchedulable> T with(@Nonnull String invokerTarget);
+
 }
