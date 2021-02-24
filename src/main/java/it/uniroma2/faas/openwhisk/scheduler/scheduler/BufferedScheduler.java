@@ -134,13 +134,11 @@ public class BufferedScheduler extends Scheduler {
                         .filter(Objects::nonNull)
                         .collect(toSet());
                 synchronized (mutex) {
-                    for (final RootControllerIndex controller : controllers) {
-                        // create new consumer for controller instance if it is not yet present
-                        if (!controllerCompletionConsumerMap.containsKey(controller)) {
-                            controllerCompletionConsumerMap.put(controller,
-                                    createCompletionConsumerFrom(controller.getAsString()));
-                        }
-                    }
+                    // create new consumer for controller instance if it is not yet present
+                    controllers.removeAll(controllerCompletionConsumerMap.keySet());
+                    controllers.forEach(c -> controllerCompletionConsumerMap.put(
+                            c, createCompletionConsumerFrom(c.getAsString())
+                    ));
                 }
 
                 // invocation queue
