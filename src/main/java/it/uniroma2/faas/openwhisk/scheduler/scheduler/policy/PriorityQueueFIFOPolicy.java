@@ -8,6 +8,7 @@ import javax.annotation.Nonnull;
 import java.util.*;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.stream.Collectors.toCollection;
 
 class PriorityQueueFIFOPolicy implements IPolicy {
 
@@ -19,8 +20,11 @@ class PriorityQueueFIFOPolicy implements IPolicy {
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Consumables can not be null.");
 
-        // OPTIMIZE: can be optimized using sorted insertions
+//        return sortUsingTreeMap(schedulables);
+        return sortUsingComparatorStream(schedulables);
+    }
 
+    private @Nonnull Queue<ISchedulable> sortUsingTreeMap(final Collection<? extends ISchedulable> schedulables) {
         // higher priority to activations with higher priority level (priority level represented as integer)
         // TreeMap default order is ascending, so here is used Comparator provided from Collections to get reverse order
         final SortedMap<Integer, Queue<ISchedulable>> prioritiesQueuesMap = new TreeMap<>(Collections.reverseOrder());
@@ -47,6 +51,16 @@ class PriorityQueueFIFOPolicy implements IPolicy {
             priorityQueue.addAll(pq);
         }
         return priorityQueue;
+    }
+
+    private @Nonnull Queue<ISchedulable> sortUsingComparatorStream(final Collection<? extends ISchedulable> schedulables) {
+        final Comparator<ISchedulable> priorityComparator = Comparator.comparing(ISchedulable::getPriority);
+        final Comparator<ISchedulable> reversePriorityComparator = (s1, s2) ->
+                Objects.requireNonNull(s2.getPriority()).compareTo(Objects.requireNonNull(s1.getPriority()));
+        return schedulables.stream()
+                .filter(s -> s != null && s.getPriority() != null)
+                .sorted(reversePriorityComparator)
+                .collect(toCollection(ArrayDeque::new));
     }
 
     @Override

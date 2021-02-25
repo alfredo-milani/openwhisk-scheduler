@@ -98,10 +98,11 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
 
     private final String traceFile = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/tracer_scheduler/invoker0.txt";
     private final String activationsComposition = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/tracer_scheduler/c0_composition.txt";
+    private final String activationsMultipleController = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/tracer_scheduler/scheduler_multiple_controller.txt";
     private LineReader lineReader;
     {
         try {
-            lineReader = new LineReader(activationsComposition);
+            lineReader = new LineReader(activationsMultipleController);
         } catch (IOException e) {
             e.printStackTrace();
         }

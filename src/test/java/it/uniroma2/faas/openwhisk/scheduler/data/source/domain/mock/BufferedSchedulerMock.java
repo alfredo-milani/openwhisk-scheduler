@@ -134,13 +134,20 @@ public class BufferedSchedulerMock extends Scheduler {
                         .map(IBufferizable::getRootControllerIndex)
                         .filter(Objects::nonNull)
                         .collect(toSet());
-                synchronized (mutex) {
+                // OPTIMIZE: for now there is no reason to get a lock to access controllerCompletionConsumerMap
+                //   because there is only one thread accessing it
+                /*synchronized (mutex) {
                     // create new consumer for controller instance if it is not yet present
                     controllers.removeAll(controllerCompletionConsumerMap.keySet());
                     controllers.forEach(c -> controllerCompletionConsumerMap.put(
                             c, createCompletionConsumerFrom(c.getAsString())
                     ));
-                }
+                }*/
+                // create new consumer for controller instance if it is not yet present
+                controllers.removeAll(controllerCompletionConsumerMap.keySet());
+                controllers.forEach(c -> controllerCompletionConsumerMap.put(
+                        c, createCompletionConsumerFrom(c.getAsString())
+                ));
 
                 // invocation queue
                 // add all invoker test action activations without acquiring any resource
@@ -157,6 +164,11 @@ public class BufferedSchedulerMock extends Scheduler {
                 }
                 if (!bufferizables.isEmpty()) {
                     synchronized (mutex) {
+                        // OPTIMIZE: if buffer is non empty and it is received an activation, all activation already
+                        //   in the buffer can not be sent to invokers because of missing resources but new
+                        //   activations received could be processed, iff require less resources;
+                        //   so it is possible to process only new activations checking if can be sent to
+                        //   invokers and, if false, add them to the buffer
                         // insert all received elements in the buffer,
                         //   reorder the buffer using selected policy
                         buffering(bufferizables);
@@ -167,6 +179,11 @@ public class BufferedSchedulerMock extends Scheduler {
                                 .collect(toSet());
                         // remove from buffer all activations that can be processed on invokers
                         //   (so, invoker has sufficient resources to process the activations)
+                        // Note: if new activation is received and can not be acquired resources on its
+                        //   invoker target (invoker target selected by Controller component), there is no point
+                        //   to check for others invokers because of Controller component, using hashing algorithm,
+                        //   has yet tried to acquire resources on others invokers, without success, so it has
+                        //   assigned randomly the invoker target, since system is overloaded
                         invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
                                 invokersWithActivations));
                     }
@@ -232,6 +249,16 @@ public class BufferedSchedulerMock extends Scheduler {
                     // second, for all invokers that have produced at least one completion,
                     //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
+                    // Note: changing invoker target, that is, sending the activation to an invoker other than
+                    //   the one chosen by the Controller component should not be a problem since the topic
+                    //   target where the completion should be sent is specified in the rootControllerIndex field
+                    //   of the activation record so, changing invoker target should not have impact in that sense;
+                    //   also note that all Load Balancers (component of Controller) manages a portion of resources
+                    //   of each invoker, so every invokers could publish on each topic associated to the controllers
+                    //   ('completedN' topics).
+                    //   The only problem could be related to the "instance" field of the activations records published
+                    //   on the 'completedN' topics associated with Controllers, since e.g. a Controller expects
+                    //   activation to come from Invoker0 instead of Invoker1.
                     if (!invokersWithCompletions.isEmpty())
                         invocationQueue.addAll(
                                 pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));
@@ -365,25 +392,6 @@ public class BufferedSchedulerMock extends Scheduler {
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull List<String> invokers) {
-        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireResourcesForAll(invokers);
-        return invokerQueueMap.values().stream()
-                .flatMap(Queue::stream)
-                .collect(Collectors.toCollection(ArrayDeque::new));
-    }
-
-    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireResourcesForAll(@Nonnull List<String> invokers) {
-        checkNotNull(invokers, "Invokers list can not be null.");
-        final Map<String, Integer> invokerCountMap = new HashMap<>(invokers.size());
-        for (final String invoker : invokers) {
-            invokerCountMap.put(invoker, Integer.MAX_VALUE);
-        }
-        return pollAndAcquireAtMostResourcesForAll(invokerCountMap).entrySet().stream()
-                .filter(entry -> entry.getValue() != null)
-                .filter(entry -> !entry.getValue().isEmpty())
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
     private @Nonnull Queue<IBufferizable> pollAndAcquireAtMostResourcesForAllFlattened(@Nonnull Map<String, Integer> invokers) {
         final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireAtMostResourcesForAll(invokers);
         return invokerQueueMap.values().stream()
@@ -463,7 +471,7 @@ public class BufferedSchedulerMock extends Scheduler {
                         return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "not enough resources");
                     } else {
                         return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-                                String.format("%s activations", entry.getValue().size()));
+                                entry.getValue().size() + " activations");
                     }
                 })
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
