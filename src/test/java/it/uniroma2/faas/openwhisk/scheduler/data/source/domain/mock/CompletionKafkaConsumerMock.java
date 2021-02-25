@@ -82,7 +82,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
         }
         final Collection<Completion> data = new ArrayDeque<>(10);
 
-        for (int i = 0; i < 1; ++i) {
+        for (int i = 0; i < 5; ++i) {
             final String record = lineReader.poll();
             try {
                 data.add(objectMapper.readValue(record, NonBlockingCompletion.class));

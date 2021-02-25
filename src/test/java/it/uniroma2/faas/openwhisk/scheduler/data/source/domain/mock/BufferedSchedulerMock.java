@@ -39,7 +39,7 @@ public class BufferedSchedulerMock extends Scheduler {
     public static final int THREAD_COUNT = 3;
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
-    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
+    public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(15);
     public static final int MAX_BUFFER_SIZE = 500;
 
     // time after which an invoker is marked as unhealthy
@@ -410,6 +410,43 @@ public class BufferedSchedulerMock extends Scheduler {
             // before return invocation queue, remove selected activations from invokerBufferMap
             invokerBufferMap.values().forEach(queue -> queue.removeAll(invocationQueue));
         }
+
+        final Map<String, Collection<IBufferizable>> invokerQueueTraceSupport = new HashMap<>(invokers.size());
+        // mark all invoker as "empty buffer"
+        invokers.forEach(invoker -> invokerQueueTraceSupport.put(invoker, null));
+        if (!invocationQueue.isEmpty()) {
+            final Map<String, Collection<IBufferizable>> invocationQueueGrouped = invocationQueue.stream()
+                    .collect(groupingBy(IBufferizable::getTargetInvoker, toCollection(ArrayDeque::new)));
+            invocationQueueGrouped.forEach(invokerQueueTraceSupport::put);
+            // if invokers associated with completions don't have activations from buffer associated,
+            //   mark them as "empty buffer or not enough resources"
+            invokers.forEach(invoker -> {
+                if (!invocationQueueGrouped.containsKey(invoker))
+                    invokerQueueTraceSupport.put(invoker, new ArrayDeque<>(0));
+            });
+        }
+        final Map<String, String> invokerQueueTrace = invokerQueueTraceSupport.entrySet().stream()
+                .map(entry -> {
+                    if (entry.getValue() == null) {
+                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "empty buffer");
+                    } else if (entry.getValue().isEmpty()) {
+                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "empty buffer or not enough resources");
+                    } else {
+                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
+                                entry.getValue().size() + " activations");
+                    }
+                })
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        final Map<String, String> invokerResourcesTrace = invokersMap.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
+                        entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
+                        entry.getValue().getMemory() + " MiB remaining)"))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        LOG.trace("Scheduling - {}.", invokerQueueTrace);
+        LOG.trace("Resources - {}.", invokerResourcesTrace);
+        LOG.trace("Buffer - {}.", invokerBufferMap.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
+
         return invocationQueue;
     }
 
