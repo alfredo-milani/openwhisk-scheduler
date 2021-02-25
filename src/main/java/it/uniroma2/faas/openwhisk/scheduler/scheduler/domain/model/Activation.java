@@ -352,7 +352,7 @@ public final class Activation implements ITraceable, IBufferizable {
         }
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
         final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
-        scheduler.putIfAbsent(K_SCHEDULER_DURATION, schedulingTermination - creationTimestamp);
+        scheduler.put(K_SCHEDULER_DURATION, schedulingTermination - creationTimestamp);
 
         return new Activation(
                 this.getAction(), this.getActivationId(),
@@ -379,7 +379,7 @@ public final class Activation implements ITraceable, IBufferizable {
         }
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
         final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
-        scheduler.putIfAbsent(K_SCHEDULER_TARGET, invokerTarget);
+        scheduler.put(K_SCHEDULER_TARGET, invokerTarget);
 
         return new Activation(
                 this.getAction(), this.getActivationId(),

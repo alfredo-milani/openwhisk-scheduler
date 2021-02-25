@@ -259,9 +259,11 @@ public class BufferedSchedulerMock extends Scheduler {
                     //   The only problem could be related to the "instance" field of the activations records published
                     //   on the 'completedN' topics associated with Controllers, since e.g. a Controller expects
                     //   activation to come from Invoker0 instead of Invoker1.
-                    if (!invokersWithCompletions.isEmpty())
+                    /*if (!invokersWithCompletions.isEmpty())
                         invocationQueue.addAll(
-                                pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));
+                                pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));*/
+                    if (!invokersWithCompletions.isEmpty())
+                        invocationQueue.addAll(pollAndAcquireResourcesFromAllInvokers(invokersWithCompletions));
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -371,6 +373,44 @@ public class BufferedSchedulerMock extends Scheduler {
 
             invokerBufferMap.put(invoker, (Queue<IBufferizable>) policy.apply(buffer));
         }
+    }
+
+    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesFromAllInvokers(@Nonnull Set<String> invokers) {
+        checkNotNull(invokers, "Invokers can not be null.");
+        // OPTIMIZE: create instance attribute (similar to invokerBufferMap) with all
+        //   activations ordered by policy but not divided by invokers
+        // invocation queue
+        final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
+        synchronized (mutex) {
+            final Queue<IBufferizable> activationsFromAllInvokers = (Queue<IBufferizable>) policy.apply(
+                    invokerBufferMap.values().stream()
+                            .flatMap(Queue::stream)
+                            .collect(toCollection(ArrayDeque::new))
+            );
+            for (final String invoker : invokers) {
+                if (activationsFromAllInvokers.isEmpty()) break;
+
+                final Invoker currentInvoker = invokersMap.get(invoker);
+                if (currentInvoker == null) continue;
+
+                final Iterator<IBufferizable> activationsFromAllInvokersIterator =
+                        activationsFromAllInvokers.iterator();
+                while (activationsFromAllInvokersIterator.hasNext()) {
+                    final IBufferizable bufferizable = activationsFromAllInvokersIterator.next();
+                    if (!currentInvoker.tryAcquireMemoryAndConcurrency(bufferizable)) continue;
+
+                    // add activation changing its invoker target
+                    // note that two activations are considered equals even if they differs for invokerTarget
+                    if (Objects.equals(bufferizable.getTargetInvoker(), invoker)) invocationQueue.add(bufferizable);
+                    else invocationQueue.add(bufferizable.with(invoker));
+                    activationsFromAllInvokersIterator.remove();
+                }
+            }
+
+            // before return invocation queue, remove selected activations from invokerBufferMap
+            invokerBufferMap.values().forEach(queue -> queue.removeAll(invocationQueue));
+        }
+        return invocationQueue;
     }
 
     private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull Set<String> invokers) {
