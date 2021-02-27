@@ -6,7 +6,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public class PolicyFactory {
 
-    public static IPolicy createPolicy(@Nonnull Policy policy) {
+    public static @Nonnull IPolicy createPolicy(@Nonnull Policy policy) {
         checkNotNull(policy, "Policy can not be null.");
 
         switch (policy) {

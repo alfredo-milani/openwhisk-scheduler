@@ -16,6 +16,10 @@ class PriorityQueueFIFOPolicy implements IPolicy {
 
     public static final Policy POLICY = Policy.PRIORITY_QUEUE_FIFO;
 
+    private final Comparator<ISchedulable> priorityComparator = Comparator.comparing(ISchedulable::getPriority);
+    private final Comparator<ISchedulable> reversePriorityComparator = (s1, s2) ->
+            Objects.requireNonNull(s2.getPriority()).compareTo(Objects.requireNonNull(s1.getPriority()));
+
     @Override
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         checkNotNull(schedulables, "Consumables can not be null.");
@@ -24,7 +28,7 @@ class PriorityQueueFIFOPolicy implements IPolicy {
         return sortUsingComparatorStream(schedulables);
     }
 
-    private @Nonnull Queue<ISchedulable> sortUsingTreeMap(final Collection<? extends ISchedulable> schedulables) {
+    private @Nonnull Queue<ISchedulable> sortUsingTreeMap(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         // higher priority to activations with higher priority level (priority level represented as integer)
         // TreeMap default order is ascending, so here is used Comparator provided from Collections to get reverse order
         final SortedMap<Integer, Queue<ISchedulable>> prioritiesQueuesMap = new TreeMap<>(Collections.reverseOrder());
@@ -53,10 +57,7 @@ class PriorityQueueFIFOPolicy implements IPolicy {
         return priorityQueue;
     }
 
-    private @Nonnull Queue<ISchedulable> sortUsingComparatorStream(final Collection<? extends ISchedulable> schedulables) {
-        final Comparator<ISchedulable> priorityComparator = Comparator.comparing(ISchedulable::getPriority);
-        final Comparator<ISchedulable> reversePriorityComparator = (s1, s2) ->
-                Objects.requireNonNull(s2.getPriority()).compareTo(Objects.requireNonNull(s1.getPriority()));
+    private @Nonnull Queue<ISchedulable> sortUsingComparatorStream(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         return schedulables.stream()
                 .filter(s -> s != null && s.getPriority() != null)
                 .sorted(reversePriorityComparator)
