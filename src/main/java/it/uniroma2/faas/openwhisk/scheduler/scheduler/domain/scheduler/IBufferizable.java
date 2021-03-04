@@ -1,6 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler;
 
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.RootControllerIndex;
 
@@ -57,12 +56,5 @@ public interface IBufferizable extends ISchedulable {
      */
     @Deprecated(since = "0.1.17")
     @Nullable Long getUserMemory();
-
-    /**
-     * Return action.
-     *
-     * @return {@link Action} which will be processed.
-     */
-    @Nullable Action getAction();
 
 }

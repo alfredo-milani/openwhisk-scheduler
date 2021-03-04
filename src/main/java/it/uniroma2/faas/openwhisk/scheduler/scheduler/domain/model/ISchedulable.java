@@ -37,6 +37,13 @@ public interface ISchedulable extends IConsumable {
     @Nullable String getTargetInvoker();
 
     /**
+     * Return action.
+     *
+     * @return {@link Action} which will be processed.
+     */
+    @Nullable Action getAction();
+
+    /**
      * Create new {@link ISchedulable} object with new provided priority level.
      *
      * @param newPriority new priority level selected for new {@link ISchedulable} object.

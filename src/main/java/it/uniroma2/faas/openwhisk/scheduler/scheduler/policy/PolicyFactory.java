@@ -19,6 +19,9 @@ public class PolicyFactory {
             case RUNNING_COMPOSITION_FIFO:
                 return new RunningCompositionFIFOPolicy();
 
+            case SHORTEST_JOB_FIRST:
+                return new ShortestJobFirst();
+
             default:
                 throw new TypeNotPresentException(policy.name(), new Throwable("Selected policy not yet implemented."));
         }

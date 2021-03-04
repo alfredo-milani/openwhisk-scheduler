@@ -8,7 +8,8 @@ public enum Policy {
 
     PASS_THROUGH,
     PRIORITY_QUEUE_FIFO,
-    RUNNING_COMPOSITION_FIFO;
+    RUNNING_COMPOSITION_FIFO,
+    SHORTEST_JOB_FIRST;
 
     public static @Nonnull Policy from(@Nonnull String policy) {
         checkNotNull(policy, "Policy can not be null.");

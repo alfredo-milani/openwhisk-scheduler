@@ -11,7 +11,7 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class PolicyTest {
+public class PriorityQueueFIFIPolicyTest {
 
     @Test
     public void isPriorityQueueFIFIPolicySortingCorrectly() {

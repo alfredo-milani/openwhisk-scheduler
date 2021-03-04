@@ -1,5 +1,6 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nonnull;
@@ -16,6 +17,11 @@ class RunningCompositionFIFOPolicy implements IPolicy {
 
     @Override
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
+        throw new RuntimeException("Policy " + POLICY + " not yet implemented.");
+    }
+
+    @Override
+    public void update(@Nonnull final Collection<? extends Completion> completions) {
         throw new RuntimeException("Policy " + POLICY + " not yet implemented.");
     }
 

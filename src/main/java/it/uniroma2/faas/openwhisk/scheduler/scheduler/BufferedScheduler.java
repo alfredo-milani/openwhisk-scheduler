@@ -21,6 +21,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -78,7 +79,6 @@ public class BufferedScheduler extends Scheduler {
     }};
 
     private final List<ISubject> subjects = new ArrayList<>();
-    // subclass can use scheduler's policy
     private final IPolicy policy;
     private final IProducer producer;
 
@@ -165,7 +165,7 @@ public class BufferedScheduler extends Scheduler {
                     synchronized (mutex) {
                         // OPTIMIZE: if buffer is non empty and it is received an activation, all activation already
                         //   in the buffer can not be sent to invokers because of missing resources but new
-                        //   activations received could be processed, iff require less resources;
+                        //   activations received could be processed, iff they require less resources;
                         //   so it is possible to process only new activations checking if can be sent to
                         //   invokers and, if false, add them to the buffer
                         // insert all received elements in the buffer,
@@ -258,6 +258,50 @@ public class BufferedScheduler extends Scheduler {
                     //   The only problem could be related to the "instance" field of the activations records published
                     //   on the 'completedN' topics associated with Controllers, since e.g. a Controller expects
                     //   activation to come from Invoker0 instead of Invoker1.
+                    // WARNING: using this new approach makes Controller state of invokers not reliable, since
+                    //   here, the Scheduler assigns activations to a different invoker target, invoker target not
+                    //   chosen by Controller
+                    //   Example: utilizzando questa versione (v0.0.21) la vista che ha lo Scheduler dello stato degli
+                    //     invokers e quella che il Controller non sono coerenti perché: se il buffer è non vuoto
+                    //     e uno degli invokers genera una 'completion', allora lo Scheduler vede se nel buffer
+                    //     complessivo del sistema (cioè tra tutte la activations presenti nel sistema, senza
+                    //     considerare le activations divise per ogni invoker) c'è una activation che può essere
+                    //     processata da quell'invoker, anche se effettivamente non è lui l'invoker target per quella
+                    //     specifica activation.
+                    //     Questo approccio porta uno svantaggio: perdita di coesione tra la vista dello stato del
+                    //     Controller e qualla dello Scheduler. Esempio: ci sono 2 invokers e sono saturi; inizialmente
+                    //     lo stato dello Scheduler e del Controller sono coerenti; invoker1 processa una 'completion',
+                    //     lo Scheduler prende una activation presente nella coda dell'invoker0 e la invia all'invoker1 e
+                    //     aggiorna il proprio stato; il Controller non è a conoscenza dell'aggiornamento di stato e per
+                    //     lui, l'invoker1 ha 1 slot di memoria disponibile, mentre per lo Scheduler, l'invoker1 non ha
+                    //     slots di memoria disponibili.
+                    //     Cosa comporta questo? Questo porta alla perdita di efficienza del principio di località
+                    //     implementato nel Controller. Continuazione esempio di cui sopra: arriva una activation nel
+                    //     sistema:
+                    //     1. sa la activation ha come home invoker l'invoker0: invoker0 è saturo per assunzione
+                    //     iniziale, quindi viene selezionato l'invoker1 (vedi 2.)
+                    //     2. la activation ha come home invoker l'invoker1: per il Controller, invoker1 non è saturo
+                    //       2.1 invoker1 può accettare la nuova activation: il Controller invia ad esso la nuova
+                    //       activation
+                    //       2.2 invoker1 non può accettare la nuova activation: il Controller sceglie un invoker
+                    //       casuale ed invia ad esso la nuova activation
+                    //       NOTA: il Controller può acquisire risorse sugli invokers (sullo stato che esso ha degli
+                    //         invokers) in modo forzato; questo viene fatto per tenere in considerazione le code che
+                    //         possono formarsi sugli invokers nel caso il sistema risulti saturo
+                    //     Nel caso 2.1, la activation arriva sullo Scheduler ma non può essere eseguita dall'invoker1
+                    //     e viene messa in coda, anche se, per il Controller poteva essere eseguita
+                    //     Un altro caso da considerare è quello relativo ad un 'completamento': invoker0 e invoker1
+                    //     sono saturi e invoker0 ha 1 activation in coda; inizialmente lo stato di Controller e
+                    //     Scheduler sono allineati; invoker1 genera un 'completamento', il Controller aggiorna lo
+                    //     stato, lo Scheduler aggiorna lo stato e invia ad esso la activation che era in coda su
+                    //     invoker0; invoker1 genera un 'completamento' per tale activation; il Controller aggiorna lo
+                    //     stato di invoker1 in modo errato: decrementa risorse che non erano state acquisite (nota:
+                    //     la activation viene correttamente rimossa dallo stato del Controller).
+                    //   Quindi, sia in caso di ricezione di nuove activations che in caso di completions, lo stato
+                    //   del Controller risulta corrotto.
+                    //   Nota: se non si forma coda sullo Scheduler, lo stato dello Scheduler e quello del Contoller
+                    //   sono allineati e quindi il sistema funziona come di norma (sfruttando cioè il principio di
+                    //   località implementato nel Controller)
                     /*if (!invokersWithCompletions.isEmpty())
                         invocationQueue.addAll(
                                 pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));*/
@@ -343,6 +387,7 @@ public class BufferedScheduler extends Scheduler {
 
     private void buffering(@Nonnull Map<String, Collection<IBufferizable>> invokerBufferizableMap) {
         checkNotNull(invokerBufferizableMap, "Input map can not be null.");
+        // OPTIMIZE: delete buffering(String, Collection)
         invokerBufferizableMap.forEach(this::buffering);
     }
 
@@ -353,8 +398,7 @@ public class BufferedScheduler extends Scheduler {
         synchronized (mutex) {
             Queue<IBufferizable> buffer = invokerBufferMap.get(invoker);
             if (buffer == null) {
-                buffer = new ArrayDeque<>();
-                invokerBufferMap.put(invoker, buffer);
+                invokerBufferMap.put(invoker, buffer = new ArrayDeque<>(bufferizables.size()));
             }
 
             // remove old activations if buffer exceed its max size
@@ -377,7 +421,7 @@ public class BufferedScheduler extends Scheduler {
     private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesFromAllInvokers(@Nonnull Set<String> invokers) {
         checkNotNull(invokers, "Invokers can not be null.");
         // OPTIMIZE: create instance attribute (similar to invokerBufferMap) with all
-        //   activations ordered by policy but not divided by invokers
+        //   activations sorted by policy but not divided by invokers
         // invocation queue
         final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
         synchronized (mutex) {
@@ -513,6 +557,7 @@ public class BufferedScheduler extends Scheduler {
                 // using iterator to remove activation from source buffer if condition is met
                 // all invoker health test actions are inserted in the invocation queue and removed from buffer
                 //   without consuming resources
+                // note that the buffer is already sorted based on selected policy
                 final Iterator<IBufferizable> bufferIterator = buffer.iterator();
                 while (bufferIterator.hasNext()) {
                     final IBufferizable activation = bufferIterator.next();
@@ -652,9 +697,6 @@ public class BufferedScheduler extends Scheduler {
 
     private void schedulePeriodicActivities() {
         // release activations too old, assuming there was an error sending completion
-        // check performed in this branch to reduce its frequency
-        //   (should not be performed in completion branch in case completion
-        //   Kafka consumers fail)
         Objects.requireNonNull(schedulerPeriodicExecutors.computation()).scheduleWithFixedDelay(
                 () -> releaseActivationsOlderThan(runningActivationTimeLimitMs),
                 0L,
@@ -671,6 +713,51 @@ public class BufferedScheduler extends Scheduler {
         );
     }
 
+    /**
+     * Generates a hash based on the string representation of {@link Action#getPath()} and {@link Action#getName()}.
+     *
+     * @param action
+     * @return
+     */
+    private static int generateHashFrom(@Nonnull Action action) {
+        checkNotNull(action, "Action can not be null.");
+        return Math.abs(action.getPath().hashCode() ^ action.getName().hashCode());
+    }
+
+    /**
+     * Euclidean algorithm to determine the greatest-common-divisor.
+     *
+     * @param a
+     * @param b
+     * @return
+     */
+    private static int gcd(int a, int b) {
+        if (b == 0) return a;
+        else return gcd(b, a % b);
+    }
+
+    /**
+     * Returns pairwise coprime numbers until n.
+     *
+     * @param n
+     * @return
+     */
+    private static List<Integer> pairwiseCoprimeNumbersUntil(int n) {
+        final ArrayList<Integer> primes = new ArrayList<>();
+        IntStream.rangeClosed(1, n).forEach(i -> {
+            if (gcd(i, n) == 1 && primes.stream().allMatch(j -> gcd(j, i) == 1)) primes.add(i);
+        });
+        return primes;
+    }
+
+    // /** Returns pairwise coprime numbers until x. Result is memoized. */
+    //  def pairwiseCoprimeNumbersUntil(x: Int): IndexedSeq[Int] =
+    //    (1 to x).foldLeft(IndexedSeq.empty[Int])((primes, cur) => {
+    //      if (gcd(cur, x) == 1 && primes.forall(i => gcd(i, cur) == 1)) {
+    //        primes :+ cur
+    //      } else primes
+    //    })
+
     public static @Nonnull String getInvokerTargetFrom(@Nonnull InvokerInstance invokerInstance) {
         checkNotNull(invokerInstance, "Instance can not be null.");
         return invokerInstance.getInstanceType().getName() + invokerInstance.getInstance();
@@ -682,8 +769,7 @@ public class BufferedScheduler extends Scheduler {
     }
 
     public static boolean isInvokerHealthTestAction(@Nullable Action action) {
-        if (action == null) return false;
-        return action.getPath().equals("whisk.system") &&
+        return action != null && action.getPath().equals("whisk.system") &&
                 action.getName().matches("^invokerHealthTestAction[0-9]+$");
     }
 

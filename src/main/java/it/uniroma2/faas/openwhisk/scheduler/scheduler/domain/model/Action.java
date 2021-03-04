@@ -46,7 +46,8 @@ public class Action {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Action action = (Action) o;
-        return Objects.equals(name, action.name) && Objects.equals(path, action.path) && Objects.equals(version, action.version);
+        return Objects.equals(name, action.name) && Objects.equals(path, action.path) &&
+                Objects.equals(version, action.version);
     }
 
     @Override

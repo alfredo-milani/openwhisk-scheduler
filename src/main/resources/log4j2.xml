@@ -52,10 +52,6 @@
             <AppenderRef level="OFF" ref="AsyncAppender"/>
         </Logger>
 
-        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PriorityQueueFIFOPolicy" additivity="false">
-            <AppenderRef level="OFF" ref="AsyncAppender"/>
-        </Logger>
-
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BaseScheduler" additivity="false">
             <AppenderRef level="ALL" ref="AsyncAppender"/>
         </Logger>
