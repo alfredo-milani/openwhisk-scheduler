@@ -80,7 +80,7 @@ public class BufferedScheduler extends Scheduler {
     private final IPolicy policy;
     private final IProducer producer;
 
-    public BufferedScheduler(@Nonnull IPolicy policy, @Nonnull IProducer producer) {
+    public BufferedScheduler(@Nonnull final IPolicy policy, @Nonnull final IProducer producer) {
         checkNotNull(policy, "Policy can not be null.");
         checkNotNull(producer, "Producer can not be null.");
 

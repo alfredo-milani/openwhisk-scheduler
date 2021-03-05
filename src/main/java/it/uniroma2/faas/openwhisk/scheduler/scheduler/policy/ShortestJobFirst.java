@@ -10,8 +10,7 @@ import javax.annotation.Nonnull;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.toCollection;
+import static java.util.stream.Collectors.*;
 
 /**
  * It is assumed that invoker's nodes are homogeneous, so that it is not necessary to group by
@@ -43,7 +42,10 @@ public class ShortestJobFirst implements IPolicy {
         actionDurationMap.entrySet().stream()
                 // sort from smallest to largest
                 .sorted(Map.Entry.comparingByValue())
-                .forEachOrdered(a -> invocationQueue.addAll(actionGroupedSchedulables.get(a.getKey())));
+                .forEachOrdered(a -> {
+                    if (actionGroupedSchedulables.containsKey(a.getKey()))
+                        invocationQueue.addAll(actionGroupedSchedulables.get(a.getKey()));
+                });
 
         return invocationQueue;
     }

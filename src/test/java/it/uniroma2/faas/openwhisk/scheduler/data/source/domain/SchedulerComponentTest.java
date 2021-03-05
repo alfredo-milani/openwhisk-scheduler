@@ -85,7 +85,9 @@ public class SchedulerComponentTest {
         final ActivationKafkaProducerMock activationsKafkaProducer = new ActivationKafkaProducerMock(kafkaProducerProperties, null);
 
         // define scheduler
-        final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
+        // final IPolicy policy = PolicyFactory.createPolicy(Policy.PASS_THROUGH);
+        // final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
+        final IPolicy policy = PolicyFactory.createPolicy(Policy.SHORTEST_JOB_FIRST);
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
         boolean tracerSchedulerOption = false;
