@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -40,7 +39,7 @@ public class BufferedScheduler extends Scheduler {
     public static final long HEALTH_CHECK_TIME_MS = TimeUnit.SECONDS.toMillis(10);
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
     public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(15);
-    public static final int MAX_BUFFER_SIZE = 500;
+    public static final int MAX_BUFFER_SIZE = 1000;
 
     // time after which an invoker is marked as unhealthy
     private long healthCheckTimeLimitMs = HEALTH_CHECK_TIME_MS;
@@ -58,9 +57,8 @@ public class BufferedScheduler extends Scheduler {
     // invoker's kafka topic name used as unique id for invoker
     // Note: must be externally synchronized to safely access Invoker entities
     private final Map<String, Invoker> invokersMap = new HashMap<>(24);
-    // <targetInvoker, Buffer>
-    // contains a mapping between an invoker id and its buffered activations
-    private final Map<String, Queue<IBufferizable>> invokerBufferMap = new HashMap<>(24);
+    // contains all activations for which it was not possible to acquire resources
+    private final Queue<IBufferizable> activationsBuffer = new ArrayDeque<>(maxBufferSize);
     // <controller, CompletionKafkaConsumer>
     // contains all completion Kafka consumer associated with controllers
     private final Map<RootControllerIndex, CompletionKafkaConsumer> controllerCompletionConsumerMap =
@@ -111,87 +109,60 @@ public class BufferedScheduler extends Scheduler {
      * @param stream
      * @param data
      */
+    @SuppressWarnings("unchecked")
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         checkNotNull(stream, "Stream can not be null.");
         checkNotNull(data, "Data can not be null.");
 
         if (stream.equals(ACTIVATION_STREAM)) {
-            final Collection<IBufferizable> bufferizables = data.stream()
+            final Collection<IBufferizable> newActivations = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
                     .collect(toCollection(ArrayDeque::new));
-            LOG.trace("[ACT] - Processing {} bufferizables objects (over {} received).",
-                    bufferizables.size(), data.size());
+            LOG.trace("[ACT] - Processing {} newActivations objects (over {} received).",
+                    newActivations.size(), data.size());
 
-            if (bufferizables.size() > 0) {
-                // filter unique controller instance from activation record and check if there is yet
-                //   a completion kafka consumer, otherwise create it
-                // for now, created completion kafka consumers run indefinitely, without a mechanism to check
-                //   if there are still producer which publish on that topics, but it's ok
-                final Set<RootControllerIndex> controllers = bufferizables.stream()
-                        .map(IBufferizable::getRootControllerIndex)
-                        .filter(Objects::nonNull)
-                        .collect(toSet());
-                // OPTIMIZE: for now there is no reason to get a lock to access controllerCompletionConsumerMap
-                //   because there is only one thread accessing it
-                /*synchronized (mutex) {
-                    // create new consumer for controller instance if it is not yet present
-                    controllers.removeAll(controllerCompletionConsumerMap.keySet());
-                    controllers.forEach(c -> controllerCompletionConsumerMap.put(
-                            c, createCompletionConsumerFrom(c.getAsString())
-                    ));
-                }*/
-                // create new consumer for controller instance if it is not yet present
-                controllers.removeAll(controllerCompletionConsumerMap.keySet());
-                controllers.forEach(c -> controllerCompletionConsumerMap.put(
-                        c, createCompletionConsumerFrom(c.getAsString())
-                ));
+            if (newActivations.size() > 0) {
+                // create new kafka completion consumer, if needed
+                // Note: for now only one thread modify completionKafkaConsumersMap,
+                //   so there is no need for locking
+                updateCompletionsConsumersFrom(newActivations);
 
                 // invocation queue
-                // add all invoker test action activations without acquiring any resource
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>(newActivations.size());
                 // invoker health test action must always be processed, otherwise
                 //   Apache OpenWhisk Controller component will mark invoker target as unavailable
-                final Queue<IBufferizable> invocationQueue = bufferizables.stream()
+                newActivations.stream()
                         .filter(b -> isInvokerHealthTestAction(b.getAction()))
-                        .collect(toCollection(ArrayDeque::new));
+                        .forEach(invocationQueue::add);
                 // remove invoker test action from input queue to be processed, if any
                 if (!invocationQueue.isEmpty()) {
-                    bufferizables.removeAll(invocationQueue);
+                    newActivations.removeAll(invocationQueue);
                     invocationQueue.forEach(a -> LOG.trace("Activations with id {} did not acquire any resources.",
                             a.getActivationId()));
                 }
-                if (!bufferizables.isEmpty()) {
+                if (!newActivations.isEmpty()) {
                     synchronized (mutex) {
-                        // OPTIMIZE: if buffer is non empty and it is received an activation, all activation already
-                        //   in the buffer can not be sent to invokers because of missing resources but new
-                        //   activations received could be processed, iff they require less resources;
-                        //   so it is possible to process only new activations checking if can be sent to
-                        //   invokers and, if false, add them to the buffer
-                        // insert all received elements in the buffer,
-                        //   reorder the buffer using selected policy
-                        buffering(bufferizables);
-
-                        // set containing invokers associated with activations just received
-                        final Set<String> invokersWithActivations = bufferizables.stream()
-                                .map(ISchedulable::getTargetInvoker)
-                                .collect(toSet());
-                        // remove from buffer all activations that can be processed on invokers
-                        //   (so, invoker has sufficient resources to process the activations)
-                        // Note: if new activation is received and can not be acquired resources on its
-                        //   invoker target (invoker target selected by Controller component), there is no point
-                        //   to check for others invokers because of Controller component, using hashing algorithm,
-                        //   has yet tried to acquire resources on others invokers, without success, so it has
-                        //   assigned randomly the invoker target, since system is overloaded
-                        invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(
-                                invokersWithActivations));
+                        // try to schedule new activations (acquiring resources on invokers)
+                        final Queue<IBufferizable> scheduledActivations = schedule(
+                                // apply selected policy to new activations before scheduling them
+                                (Queue<IBufferizable>) policy.apply(newActivations),
+                                getHealthyInvokers(invokersMap.values())
+                        );
+                        // remove all scheduled activations
+                        newActivations.removeAll(scheduledActivations);
+                        // buffering remaining activations
+                        buffering(newActivations);
+                        // add all scheduled activations to invocation queue
+                        invocationQueue.addAll(scheduledActivations);
                     }
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
             }
         } else if (stream.equals(COMPLETION_STREAM)) {
-            final Collection<? extends Completion> completions = data.stream()
+            final Collection<Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
                     .map(Completion.class::cast)
                     .collect(toCollection(ArrayDeque::new));
@@ -202,50 +173,13 @@ public class BufferedScheduler extends Scheduler {
                 // invocation queue
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
+                    // update policy's state, if needed
+                    policy.update(completions);
                     // contains id of invokers that have processed at least one completion
-                    final Set<String> invokersWithCompletions = new HashSet<>(invokersMap.size());
-
-                    // first, free resources for all received completions
-                    for (final Completion completion : completions) {
-                        final String invokerTarget = getInvokerTargetFrom(completion.getInstance());
-                        final String activationId;
-                        if (completion instanceof NonBlockingCompletion) {
-                            activationId = ((NonBlockingCompletion) completion).getActivationId();
-                        } else if (completion instanceof BlockingCompletion) {
-                            activationId = ((BlockingCompletion) completion).getResponse().getActivationId();
-                        } else if (completion instanceof FailureCompletion) {
-                            activationId = ((FailureCompletion) completion).getResponse();
-                        } else {
-                            LOG.trace("Failing to process completion from invoker {}.", invokerTarget);
-                            continue;
-                        }
-                        if (activationId == null) {
-                            LOG.warn("Completion received does not have valid activationId.");
-                            continue;
-                        }
-
-                        final Invoker invoker = invokersMap.get(invokerTarget);
-                        // there is no reference to this invoker in the system
-                        if (invoker == null) continue;
-
-                        final long activationsCountBeforeRelease = invoker.getActivationsCount();
-                        // release resources associated with this completion (even if invoker is not healthy)
-                        invoker.release(activationId);
-                        // check if activation is effectively released
-                        // activations that do not need to release resource are invokerHealthTestAction
-                        if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
-                            LOG.trace("Activation with id {} did not release any resources.", activationId);
-                            continue;
-                        }
-
-                        // add invoker to the set of invokers that have processed at least one completion
-                        // note that, if n completions have been received, it is not sufficient check for
-                        //   first n buffered activations because it is possible that one of the completion processed
-                        //   released enough resources for m buffered activations
-                        invokersWithCompletions.add(invokerTarget);
-                    }
-
-                    // second, for all invokers that have produced at least one completion,
+                    final List<Invoker> invokersWithCompletions = processCompletions(completions);
+                    // remove all unhealthy invokers
+                    invokersWithCompletions.removeAll(getUnhealthyInvokers(invokersMap.values()));
+                    // for all invokers that have produced at least one completion,
                     //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
                     // Note: changing invoker target, that is, sending the activation to an invoker other than
@@ -302,18 +236,21 @@ public class BufferedScheduler extends Scheduler {
                     //   Nota: se non si forma coda sullo Scheduler, lo stato dello Scheduler e quello del Contoller
                     //   sono allineati e quindi il sistema funziona come di norma (sfruttando cioè il principio di
                     //   località implementato nel Controller)
-                    /*if (!invokersWithCompletions.isEmpty())
-                        invocationQueue.addAll(
-                                pollAndAcquireResourcesForAllFlattened(invokersWithCompletions));*/
-                    if (!invokersWithCompletions.isEmpty())
-                        invocationQueue.addAll(pollAndAcquireResourcesFromAllInvokers(invokersWithCompletions));
+                    final Queue<IBufferizable> scheduledActivations = schedule(
+                            activationsBuffer,
+                            invokersWithCompletions
+                    );
+                    // remove all scheduled activations from buffer
+                    activationsBuffer.removeAll(scheduledActivations);
+                    // add all scheduled activations to invocation queue
+                    invocationQueue.addAll(scheduledActivations);
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
             }
         } else if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
-            final Set<? extends Health> heartbeats = data.stream()
+            final Set<Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
                     .map(Health.class::cast)
                     // get only unique hearth-beats messages using Set data structure
@@ -326,38 +263,16 @@ public class BufferedScheduler extends Scheduler {
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
                     // contains id of invokers that have turned healthy
-                    final Set<String> invokersTurnedHealthy = new HashSet<>(invokersMap.size());
-
-                    for (final Health health : heartbeats) {
-                        final String invokerTarget = getInvokerTargetFrom(health.getInstance());
-                        Invoker invoker = invokersMap.get(invokerTarget);
-
-                        // invoker has not yet registered in the system
-                        if (invoker == null) {
-                            final Invoker newInvoker = new Invoker(invokerTarget, getUserMemoryFrom(health.getInstance()));
-                            // register new invoker
-                            invokersMap.put(invokerTarget, newInvoker);
-                            invoker = newInvoker;
-                            LOG.trace("New invoker registered in the system: {}.", invokerTarget);
-                        }
-
-                        // if invoker was already healthy, update its timestamp
-                        if (invoker.isHealthy()) {
-                            invoker.setLastCheck(Instant.now().toEpochMilli());
-                        // invoker has become healthy
-                        } else {
-                            // upon receiving hearth-beat from invoker, mark that invoker as healthy
-                            invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
-                            LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
-                            // add invoker to the set of invokers that have turned healthy
-                            invokersTurnedHealthy.add(invokerTarget);
-                        }
-                    }
-
-                    // remove all activations from buffer for which invokers
-                    //   that have turned healthy can handle
-                    if (!invokersTurnedHealthy.isEmpty())
-                        invocationQueue.addAll(pollAndAcquireResourcesForAllFlattened(invokersTurnedHealthy));
+                    final List<Invoker> invokersTurnedHealthy = processHearthBeats(new ArrayList<>(heartbeats));
+                    // schedule activations to all invokers turned healthy
+                    final Queue<IBufferizable> scheduledActivations = schedule(
+                            activationsBuffer,
+                            invokersTurnedHealthy
+                    );
+                    // remove all scheduled activations from buffer
+                    activationsBuffer.removeAll(scheduledActivations);
+                    // add all scheduled activations to invocation queue
+                    invocationQueue.addAll(scheduledActivations);
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -378,234 +293,123 @@ public class BufferedScheduler extends Scheduler {
         LOG.trace("{} shutdown.", this.getClass().getSimpleName());
     }
 
-    private void buffering(@Nonnull Collection<IBufferizable> bufferizables) {
-        checkNotNull(bufferizables, "Input collection can not be null.");
-        final Map<String, Collection<IBufferizable>> invokerCollectionMap = bufferizables.stream()
-                .collect(groupingBy(IBufferizable::getTargetInvoker, toCollection(ArrayList::new)));
-        buffering(invokerCollectionMap);
-    }
-
-    private void buffering(@Nonnull Map<String, Collection<IBufferizable>> invokerBufferizableMap) {
-        checkNotNull(invokerBufferizableMap, "Input map can not be null.");
-        // OPTIMIZE: delete buffering(String, Collection)
-        invokerBufferizableMap.forEach(this::buffering);
-    }
-
-    private void buffering(@Nonnull String invoker, @Nonnull Collection<IBufferizable> bufferizables) {
-        checkNotNull(invoker, "Invoker target can not be null.");
-        checkNotNull(bufferizables, "Input collection can not be null.");
-        if (bufferizables.isEmpty()) return;
-        synchronized (mutex) {
-            Queue<IBufferizable> buffer = invokerBufferMap.get(invoker);
-            if (buffer == null) {
-                invokerBufferMap.put(invoker, buffer = new ArrayDeque<>(bufferizables.size()));
-            }
-
-            // remove old activations if buffer exceed its max size
-            final int total = buffer.size() + bufferizables.size();
-            if (total > maxBufferSize) {
-                // creating new array dequeue to use #removeLast method
-                buffer = new ArrayDeque<>(buffer);
-                final int toRemove = total - maxBufferSize;
-                for (int i = 0; i < toRemove; ++i) ((ArrayDeque<IBufferizable>) buffer).removeLast();
-                LOG.trace("Reached buffer limit ({}) for invoker {} - discarding last {} activations.",
-                        maxBufferSize, invoker, toRemove);
-            }
-            // add all new activations
-            buffer.addAll(bufferizables);
-
-            invokerBufferMap.put(invoker, (Queue<IBufferizable>) policy.apply(buffer));
-        }
-    }
-
-    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesFromAllInvokers(@Nonnull Set<String> invokers) {
-        checkNotNull(invokers, "Invokers can not be null.");
-        // OPTIMIZE: create instance attribute (similar to invokerBufferMap) with all
-        //   activations sorted by policy but not divided by invokers
-        // invocation queue
-        final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-        synchronized (mutex) {
-            final Queue<IBufferizable> activationsFromAllInvokers = (Queue<IBufferizable>) policy.apply(
-                    invokerBufferMap.values().stream()
-                            .flatMap(Queue::stream)
-                            .collect(toCollection(ArrayDeque::new))
-            );
-            for (final String invoker : invokers) {
-                if (activationsFromAllInvokers.isEmpty()) break;
-
-                final Invoker currentInvoker = invokersMap.get(invoker);
-                if (currentInvoker == null) continue;
-
-                final Iterator<IBufferizable> activationsFromAllInvokersIterator =
-                        activationsFromAllInvokers.iterator();
-                while (activationsFromAllInvokersIterator.hasNext()) {
-                    final IBufferizable bufferizable = activationsFromAllInvokersIterator.next();
-                    if (!currentInvoker.tryAcquireMemoryAndConcurrency(bufferizable)) continue;
-
-                    // add activation changing its invoker target
-                    // note that two activations are considered equals even if they differs for invokerTarget
-                    if (Objects.equals(bufferizable.getTargetInvoker(), invoker)) invocationQueue.add(bufferizable);
-                    else invocationQueue.add(bufferizable.with(invoker));
-                    activationsFromAllInvokersIterator.remove();
-                }
-            }
-
-            // before return invocation queue, remove selected activations from invokerBufferMap
-            invokerBufferMap.values().forEach(queue -> queue.removeAll(invocationQueue));
-        }
-
-        final Map<String, Collection<IBufferizable>> invokerQueueTraceSupport = new HashMap<>(invokers.size());
-        // mark all invoker as "empty buffer"
-        invokers.forEach(invoker -> invokerQueueTraceSupport.put(invoker, null));
-        if (!invocationQueue.isEmpty()) {
-            final Map<String, Collection<IBufferizable>> invocationQueueGrouped = invocationQueue.stream()
-                    .collect(groupingBy(IBufferizable::getTargetInvoker, toCollection(ArrayDeque::new)));
-            invocationQueueGrouped.forEach(invokerQueueTraceSupport::put);
-            // if invokers associated with completions don't have activations from buffer associated,
-            //   mark them as "empty buffer or not enough resources"
-            invokers.forEach(invoker -> {
-                if (!invocationQueueGrouped.containsKey(invoker))
-                    invokerQueueTraceSupport.put(invoker, new ArrayDeque<>(0));
-            });
-        }
-        final Map<String, String> invokerQueueTrace = invokerQueueTraceSupport.entrySet().stream()
-                .map(entry -> {
-                    if (entry.getValue() == null) {
-                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "empty buffer");
-                    } else if (entry.getValue().isEmpty()) {
-                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "empty buffer or not enough resources");
-                    } else {
-                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-                                entry.getValue().size() + " activations");
-                    }
-                })
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        final Map<String, String> invokerResourcesTrace = invokersMap.entrySet().stream()
-                .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
-                        entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
-                        entry.getValue().getMemory() + " MiB remaining)"))
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        LOG.trace("Scheduling - {}.", invokerQueueTrace);
-        LOG.trace("Resources - {}.", invokerResourcesTrace);
-        LOG.trace("Buffer - {}.", invokerBufferMap.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
-
-        return invocationQueue;
-    }
-
-    private @Nonnull Queue<IBufferizable> pollAndAcquireResourcesForAllFlattened(@Nonnull Set<String> invokers) {
-        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireResourcesForAll(invokers);
-        return invokerQueueMap.values().stream()
-                .flatMap(Queue::stream)
-                .collect(Collectors.toCollection(ArrayDeque::new));
-    }
-
-    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireResourcesForAll(@Nonnull Set<String> invokers) {
-        checkNotNull(invokers, "Invokers set can not be null.");
-        final Map<String, Integer> invokerCountMap = new HashMap<>(invokers.size());
-        for (final String invoker : invokers) {
-            invokerCountMap.put(invoker, Integer.MAX_VALUE);
-        }
-        return pollAndAcquireAtMostResourcesForAll(invokerCountMap).entrySet().stream()
-                .filter(entry -> entry.getValue() != null)
-                .filter(entry -> !entry.getValue().isEmpty())
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-
-    private @Nonnull Queue<IBufferizable> pollAndAcquireAtMostResourcesForAllFlattened(@Nonnull Map<String, Integer> invokers) {
-        final Map<String, Queue<IBufferizable>> invokerQueueMap = pollAndAcquireAtMostResourcesForAll(invokers);
-        return invokerQueueMap.values().stream()
+    private void updateCompletionsConsumersFrom(@Nonnull final Collection<IBufferizable> newActivations) {
+        // filter unique controller instance from activation record and check if there is yet
+        //   a completion kafka consumer, otherwise create it
+        // for now, created completion kafka consumers run indefinitely, without a mechanism to check
+        //   if there are still producer which publish on that topics, but it's ok
+        final Set<RootControllerIndex> controllers = newActivations.stream()
+                .map(IBufferizable::getRootControllerIndex)
                 .filter(Objects::nonNull)
-                .filter(Predicate.not(Collection::isEmpty))
-                .flatMap(Queue::stream)
-                .collect(Collectors.toCollection(ArrayDeque::new));
+                .collect(toSet());
+        // create new consumer for controller instance if it is not yet present
+        controllers.removeAll(controllerCompletionConsumerMap.keySet());
+        controllers.forEach(controller -> controllerCompletionConsumerMap.put(
+                controller, createCompletionConsumerFrom(controller.getAsString())
+        ));
     }
 
-    private @Nonnull Map<String, Queue<IBufferizable>> pollAndAcquireAtMostResourcesForAll(@Nonnull Map<String, Integer> invokers) {
-        checkNotNull(invokers, "Invokers list can not be null.");
-        final Map<String, Queue<IBufferizable>> invokerBufferizableMap = new HashMap<>(invokers.size());
-        synchronized (mutex) {
-            // second, for all invokers specified check if there is a buffered activation
-            //   that can be scheduled on it (so, if it has necessary resources)
-            for (final Map.Entry<String, Integer> entry : invokers.entrySet()) {
-                final String invokerTarget = entry.getKey();
-                final Invoker invoker = invokersMap.get(invokerTarget);
+    private @Nonnull List<Invoker> processHearthBeats(@Nonnull final Collection<Health> heartBeats) {
+        final List<Invoker> invokersTurnedHealthy = new ArrayList<>(invokersMap.size());
+        if (heartBeats.isEmpty()) return invokersTurnedHealthy;
 
-                // if invoker target is not healthy, so no new activations can be scheduled on it
-                if (invoker == null || !invoker.isHealthy()) continue;
+        for (final Health health : heartBeats) {
+            final String invokerTarget = getInvokerTargetFrom(health.getInstance());
+            Invoker invoker = invokersMap.get(invokerTarget);
 
-                // elements inside buffer are already sorted, using selected policy, in the order
-                //   they should be submitted
-                final Queue<IBufferizable> buffer = invokerBufferMap.get(invokerTarget);
-                // if there are no buffered activations for current invoker, check next
-                if (buffer == null || buffer.isEmpty()) {
-                    // null queue to indicate that buffer is empty
-                    invokerBufferizableMap.put(invokerTarget, null);
-                    continue;
-                }
+            // invoker has not yet registered in the system
+            if (invoker == null) {
+                final Invoker newInvoker = new Invoker(
+                        invokerTarget,
+                        getUserMemoryFrom(health.getInstance())
+                );
+                // register new invoker
+                invokersMap.put(invokerTarget, newInvoker);
+                invoker = newInvoker;
+                LOG.trace("New invoker registered in the system: {}.", invokerTarget);
+            }
 
-                // for all completions processed by current invoker, submit all buffered activations
-                //   for which invoker has sufficient resources
-                Integer count = entry.getValue();
-                // double check
-                if (count == null) {
-                    LOG.warn("Map contains invokerTarget key but no value for count.");
-                    continue;
-                }
-                // invocation queue
-                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-                // using iterator to remove activation from source buffer if condition is met
-                // all invoker health test actions are inserted in the invocation queue and removed from buffer
-                //   without consuming resources
-                // note that the buffer is already sorted based on selected policy
-                final Iterator<IBufferizable> bufferIterator = buffer.iterator();
-                while (bufferIterator.hasNext()) {
-                    final IBufferizable activation = bufferIterator.next();
-
-                    // if count of activations to select have been reached, break iteration
-                    if (count <= 0) break;
-                    // checks if current buffered activation can be submitted
-                    // note that it is not sufficient break iteration if can not be acquired
-                    //   memory and concurrency on current activation because it is possible that
-                    //   there is another activation in the buffered queue with requirements
-                    //   to be scheduled on current invoker
-                    if (!invoker.tryAcquireMemoryAndConcurrency(activation)) continue;
-
-                    // add to invocation queue
-                    invocationQueue.add(activation);
-                    // remove from buffer
-                    bufferIterator.remove();
-                    // reduce activations numbers to send
-                    --count;
-                }
-                // if there is at least one activation which fulfill requirements, add to map
-                // adding empty queue to indicate that, on current invoker,
-                //   there are not available resources
-                invokerBufferizableMap.put(invokerTarget, invocationQueue);
+            // if invoker was already healthy, update its timestamp
+            if (invoker.isHealthy()) {
+                invoker.setLastCheck(Instant.now().toEpochMilli());
+                // invoker has become healthy
+            } else {
+                // upon receiving hearth-beat from invoker, mark that invoker as healthy
+                invoker.updateState(HEALTHY, Instant.now().toEpochMilli());
+                LOG.trace("Invoker {} marked as {}.", invokerTarget, invoker.getState());
+                // add invoker to the set of invokers that have turned healthy
+                invokersTurnedHealthy.add(invoker);
             }
         }
-        final Map<String, String> invokerQueueTrace = invokerBufferizableMap.entrySet().stream()
-                .map(entry -> {
-                    if (entry.getValue() == null) {
-                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "empty buffer");
-                    } else if (entry.getValue().isEmpty()) {
-                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), "not enough resources");
-                    } else {
-                        return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-                                entry.getValue().size() + " activations");
-                    }
-                })
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        final Map<String, String> invokerResourcesTrace = invokersMap.entrySet().stream()
-                .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
-                        entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
-                        entry.getValue().getMemory() + " MiB remaining)"))
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
-        LOG.trace("Scheduling - {}.", invokerQueueTrace);
-        LOG.trace("Resources - {}.", invokerResourcesTrace);
-        LOG.trace("Buffer - {}.", invokerBufferMap.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size())));
-        return invokerBufferizableMap;
+
+        return invokersTurnedHealthy;
+    }
+
+    private @Nonnull List<Invoker> processCompletions(@Nonnull final Collection<Completion> completions) {
+        final List<Invoker> invokersWithCompletions = new ArrayList<>(invokersMap.size());
+        if (completions.isEmpty()) return invokersWithCompletions;
+
+        // free resources for all received completions
+        for (final Completion completion : completions) {
+            final String invokerTarget = getInvokerTargetFrom(completion.getInstance());
+            final String activationId;
+            if (completion instanceof NonBlockingCompletion) {
+                activationId = ((NonBlockingCompletion) completion).getActivationId();
+            } else if (completion instanceof BlockingCompletion) {
+                activationId = ((BlockingCompletion) completion).getResponse().getActivationId();
+            } else if (completion instanceof FailureCompletion) {
+                activationId = ((FailureCompletion) completion).getResponse();
+            } else {
+                LOG.trace("Failing to process completion from invoker {}.", invokerTarget);
+                continue;
+            }
+            if (activationId == null) {
+                LOG.warn("Completion received does not have valid activationId.");
+                continue;
+            }
+
+            final Invoker invoker = invokersMap.get(invokerTarget);
+            // there is no reference to this invoker in the system
+            if (invoker == null) continue;
+
+            final long activationsCountBeforeRelease = invoker.getActivationsCount();
+            // release resources associated with this completion (even if invoker is not healthy)
+            invoker.release(activationId);
+            // check if activation is effectively released
+            // activations that do not need to release resource are invokerHealthTestAction
+            if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
+                LOG.trace("Activation with id {} did not release any resources.", activationId);
+                continue;
+            }
+
+            // add invoker to the set of invokers that have processed at least one completion
+            // note that, if n completions have been received, it is not sufficient check for
+            //   first n buffered activations because it is possible that one of the completion processed
+            //   released enough resources for m, with m >= n, buffered activations
+            invokersWithCompletions.add(invoker);
+        }
+
+        return invokersWithCompletions;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void buffering(@Nonnull final Collection<IBufferizable> newActivations) {
+        if (newActivations.isEmpty()) return;
+
+        final ArrayDeque<IBufferizable> buffer = new ArrayDeque<>(activationsBuffer);
+        // remove old activations if buffer exceed its max size
+        final int totalCapacity = buffer.size() + newActivations.size();
+        if (totalCapacity > maxBufferSize) {
+            final int toRemove = totalCapacity - maxBufferSize;
+            IntStream.range(0, toRemove).forEach(i -> buffer.removeLast());
+            LOG.trace("Reached buffer limit ({}) - discarding last {} activations.", maxBufferSize, toRemove);
+        }
+        // add all new activations
+        buffer.addAll(newActivations);
+
+        activationsBuffer.clear();
+        // apply selected policy to activations to buffer
+        activationsBuffer.addAll((Queue<IBufferizable>) policy.apply(buffer));
     }
 
     private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
@@ -640,8 +444,6 @@ public class BufferedScheduler extends Scheduler {
                     invoker.updateState(OFFLINE);
                     invoker.removeAllContainers();
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
-                    // when invoker is marked as offline, release resources associated with it
-                    invokerBufferMap.remove(invoker.getInvokerName());
                     // continue because if invoker is offline is also unhealthy
                     continue;
                 }
@@ -714,13 +516,79 @@ public class BufferedScheduler extends Scheduler {
     }
 
     /**
+     * Try acquire resource for all {@link ISchedulable} received in input.
+     *
+     * @param activations
+     * @param availableInvokers
+     * @return all {@link ISchedulable} objects for which it was possible to acquire the necessary resources.
+     */
+    private @Nonnull Queue<IBufferizable> schedule(@Nonnull final Queue<IBufferizable> activations,
+                                                   @Nonnull final List<Invoker> availableInvokers) {
+        final Queue<IBufferizable> activationsScheduled = new ArrayDeque<>(activations.size());
+        if (activations.isEmpty() || availableInvokers.isEmpty()) return activationsScheduled;
+
+        final int availableInvokerSize = availableInvokers.size();
+        final List<Integer> stepSizes = pairwiseCoprimeNumbersUntil(availableInvokerSize);
+        activations.stream()
+                .filter(activation -> activation.getAction() != null)
+                .forEachOrdered(activation -> {
+                    final int hash = generateHashFrom(activation.getAction());
+                    final int homeInvoker = hash % availableInvokerSize;
+                    final int stepSize = stepSizes.get(hash % stepSizes.size());
+
+                    int invokerIndex = homeInvoker;
+                    for (int i = 0; i < availableInvokerSize; ++i) {
+                        final Invoker invoker = availableInvokers.get(invokerIndex);
+                        if (invoker.tryAcquireMemoryAndConcurrency(activation)) {
+                            // do not use Apache OpenWhisk Controller selected invoker,
+                            //   because its state may be corrupted by Scheduler's buffering mechanism
+                            activationsScheduled.add(activation.with(invoker.getInvokerName()));
+                            break;
+                        } else {
+                            invokerIndex = (invokerIndex + stepSize) % availableInvokerSize;
+                        }
+                    }
+                });
+
+        final Map<String, String> activationsScheduledTrace = activationsScheduled.stream()
+                .collect(groupingBy(IBufferizable::getTargetInvoker, toUnmodifiableList()))
+                .entrySet().stream()
+                .collect(toMap(Map.Entry::getKey, entry -> entry.getValue().size() + " actv"));
+        LOG.trace("Scheduling - {}.", activationsScheduledTrace);
+        final Map<String, String> invokersResourcesTrace = invokersMap.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
+                        entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
+                        entry.getValue().getMemory() + " MiB remaining)"))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        LOG.trace("Resources - {}.", invokersResourcesTrace);
+        final Map<String, Integer> activationsBufferTrace = activationsBuffer.stream()
+                .collect(groupingBy(IBufferizable::getTargetInvoker, toUnmodifiableList()))
+                .entrySet().stream()
+                .collect(toMap(Map.Entry::getKey, entry -> entry.getValue().size()));
+        LOG.trace("Buffer - {}.", activationsBufferTrace);
+
+        return activationsScheduled;
+    }
+
+    private @Nonnull List<Invoker> getHealthyInvokers(@Nonnull final Collection<Invoker> invokers) {
+        return invokers.stream()
+                .filter(Invoker::isHealthy)
+                .collect(toUnmodifiableList());
+    }
+
+    private @Nonnull List<Invoker> getUnhealthyInvokers(@Nonnull final Collection<Invoker> invokers) {
+        return invokers.stream()
+                .filter(Predicate.not(Invoker::isHealthy))
+                .collect(toUnmodifiableList());
+    }
+
+    /**
      * Generates a hash based on the string representation of {@link Action#getPath()} and {@link Action#getName()}.
      *
      * @param action
      * @return
      */
-    private static int generateHashFrom(@Nonnull Action action) {
-        checkNotNull(action, "Action can not be null.");
+    private static int generateHashFrom(@Nonnull final Action action) {
         return Math.abs(action.getPath().hashCode() ^ action.getName().hashCode());
     }
 
@@ -742,7 +610,7 @@ public class BufferedScheduler extends Scheduler {
      * @param n
      * @return
      */
-    private static List<Integer> pairwiseCoprimeNumbersUntil(int n) {
+    private static @Nonnull List<Integer> pairwiseCoprimeNumbersUntil(int n) {
         final ArrayList<Integer> primes = new ArrayList<>();
         IntStream.rangeClosed(1, n).forEach(i -> {
             if (gcd(i, n) == 1 && primes.stream().allMatch(j -> gcd(j, i) == 1)) primes.add(i);
@@ -750,25 +618,11 @@ public class BufferedScheduler extends Scheduler {
         return primes;
     }
 
-    // /** Returns pairwise coprime numbers until x. Result is memoized. */
-    //  def pairwiseCoprimeNumbersUntil(x: Int): IndexedSeq[Int] =
-    //    (1 to x).foldLeft(IndexedSeq.empty[Int])((primes, cur) => {
-    //      if (gcd(cur, x) == 1 && primes.forall(i => gcd(i, cur) == 1)) {
-    //        primes :+ cur
-    //      } else primes
-    //    })
-
-    public static @Nonnull String getInvokerTargetFrom(@Nonnull InvokerInstance invokerInstance) {
-        checkNotNull(invokerInstance, "Instance can not be null.");
+    public static @Nonnull String getInvokerTargetFrom(@Nonnull final InvokerInstance invokerInstance) {
         return invokerInstance.getInstanceType().getName() + invokerInstance.getInstance();
     }
 
-    public static int getInstanceFrom(@Nonnull String invokerTarget) {
-        checkNotNull(invokerTarget, "Invoker target can not be null.");
-        return Integer.parseInt(invokerTarget.replace("invoker", ""));
-    }
-
-    public static boolean isInvokerHealthTestAction(@Nullable Action action) {
+    public static boolean isInvokerHealthTestAction(@Nullable final Action action) {
         return action != null && action.getPath().equals("whisk.system") &&
                 action.getName().matches("^invokerHealthTestAction[0-9]+$");
     }
@@ -780,7 +634,6 @@ public class BufferedScheduler extends Scheduler {
      * @return
      */
     public static long getUserMemoryFrom(@Nonnull InvokerInstance invokerInstance) {
-        checkNotNull(invokerInstance, "Instance can not be null.");
         return Long.parseLong(invokerInstance.getUserMemory().split(" ")[0]) / (1024L * 1024L);
     }
 

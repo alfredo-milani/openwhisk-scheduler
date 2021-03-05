@@ -127,8 +127,9 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
             e.printStackTrace();
         }*/
 
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 10; ++i) {
             final String record = lineReader.poll();
+            if (record == null) break;
             try {
                 data.add(objectMapper.readValue(record, Activation.class));
             } catch (JsonProcessingException e) {

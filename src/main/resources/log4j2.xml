@@ -15,6 +15,7 @@
         </File>
         <Async name="AsyncAppender">
             <AppenderRef ref="FileAppender"/>
+            <!-- <AppenderRef ref="ConsoleAppender"/> -->
         </Async>
 
         <!-- Async Loggers will auto-flash in batches, so switch off immediateFlush -->

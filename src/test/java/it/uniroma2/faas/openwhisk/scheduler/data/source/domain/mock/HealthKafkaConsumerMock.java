@@ -62,7 +62,7 @@ public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
 
         if (random.nextBoolean()) return null;
 
-        for (int i = 0; i < 1; ++i) {
+        for (int i = 0; i < 10; ++i) {
             try {
                  int invoker = random.ints(0, 3).findFirst().getAsInt();
 //                int invoker = 0;

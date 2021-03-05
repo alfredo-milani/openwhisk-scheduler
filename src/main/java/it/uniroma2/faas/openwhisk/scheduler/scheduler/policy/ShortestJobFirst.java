@@ -10,7 +10,6 @@ import javax.annotation.Nonnull;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toCollection;
 
@@ -30,9 +29,7 @@ public class ShortestJobFirst implements IPolicy {
     private final Map<Action, Long> actionDurationMap = new HashMap<>();
 
     @Override
-    public @Nonnull Queue<? extends ISchedulable> apply(@Nonnull Collection<? extends ISchedulable> schedulables) {
-        checkNotNull(schedulables, "Schedulables can not be null.");
-
+    public @Nonnull Queue<? extends ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(schedulables.size());
 
         // group received schedulables by action
@@ -53,8 +50,6 @@ public class ShortestJobFirst implements IPolicy {
 
     @Override
     public void update(@Nonnull final Collection<? extends Completion> completions) {
-        checkNotNull(completions, "Schedulables can not be null.");
-
         // only blocking completions have "annotations" filed which contains action's "duration"
         final Collection<BlockingCompletion> blockingCompletions = completions.stream()
                 .filter(BlockingCompletion.class::isInstance)
@@ -100,7 +95,6 @@ public class ShortestJobFirst implements IPolicy {
     }
 
     private static @Nonnull Action getActionFrom(@Nonnull final BlockingCompletion blockingCompletion) {
-        checkNotNull(blockingCompletion, "Blocking completion can not be null.");
         return new Action(
                 blockingCompletion.getResponse().getName(),
                 blockingCompletion.getResponse().getNamespace(),

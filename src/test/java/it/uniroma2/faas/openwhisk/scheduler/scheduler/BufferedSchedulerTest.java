@@ -1,6 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
