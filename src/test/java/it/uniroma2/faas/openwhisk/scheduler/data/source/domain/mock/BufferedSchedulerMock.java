@@ -183,7 +183,8 @@ public class BufferedSchedulerMock extends Scheduler {
                     // contains id of invokers that have processed at least one completion
                     final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
                     // remove all unhealthy invokers
-                    invokersWithCompletions.removeAll(getUnhealthyInvokers(invokersMap.values()));
+                    final List<Invoker> healthyInvokersWithCompletions = new ArrayList<>(invokersWithCompletions);
+                    healthyInvokersWithCompletions.removeAll(getUnhealthyInvokers(invokersMap.values()));
                     // for all invokers that have produced at least one completion,
                     //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
@@ -243,7 +244,7 @@ public class BufferedSchedulerMock extends Scheduler {
                     //   località implementato nel Controller)
                     final Queue<IBufferizable> scheduledActivations = schedule(
                             activationsBuffer,
-                            invokersWithCompletions
+                            healthyInvokersWithCompletions
                     );
                     // remove all scheduled activations from buffer
                     activationsBuffer.removeAll(scheduledActivations);
@@ -251,9 +252,11 @@ public class BufferedSchedulerMock extends Scheduler {
                     invocationQueue.addAll(scheduledActivations);
 
                     // log trace
-                    schedulingStats(scheduledActivations);
-                    resourcesStats(invokersMap);
-                    bufferStats(activationsBuffer);
+                    if (!invokersWithCompletions.isEmpty()) {
+                        schedulingStats(scheduledActivations);
+                        resourcesStats(invokersMap);
+                        bufferStats(activationsBuffer);
+                    }
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -288,9 +291,11 @@ public class BufferedSchedulerMock extends Scheduler {
                     invocationQueue.addAll(scheduledActivations);
 
                     // log trace
-                    schedulingStats(scheduledActivations);
-                    resourcesStats(invokersMap);
-                    bufferStats(activationsBuffer);
+                    if (!scheduledActivations.isEmpty()) {
+                        schedulingStats(scheduledActivations);
+                        resourcesStats(invokersMap);
+                        bufferStats(activationsBuffer);
+                    }
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
