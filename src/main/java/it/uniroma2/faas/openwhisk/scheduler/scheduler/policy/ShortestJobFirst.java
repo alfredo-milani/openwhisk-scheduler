@@ -10,7 +10,8 @@ import javax.annotation.Nonnull;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static java.util.stream.Collectors.*;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toCollection;
 
 /**
  * It is assumed that invoker's nodes are homogeneous, so that it is not necessary to group by

@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer.COMPLETION_STREAM;
@@ -156,6 +155,11 @@ public class BufferedScheduler extends Scheduler {
                         buffering(newActivations);
                         // add all scheduled activations to invocation queue
                         invocationQueue.addAll(scheduledActivations);
+
+                        // log trace
+                        schedulingStats(scheduledActivations);
+                        resourcesStats(invokersMap);
+                        bufferStats(activationsBuffer);
                     }
                 }
                 // send activations
@@ -176,7 +180,7 @@ public class BufferedScheduler extends Scheduler {
                     // update policy's state, if needed
                     policy.update(completions);
                     // contains id of invokers that have processed at least one completion
-                    final List<Invoker> invokersWithCompletions = processCompletions(completions);
+                    final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
                     // remove all unhealthy invokers
                     invokersWithCompletions.removeAll(getUnhealthyInvokers(invokersMap.values()));
                     // for all invokers that have produced at least one completion,
@@ -244,6 +248,11 @@ public class BufferedScheduler extends Scheduler {
                     activationsBuffer.removeAll(scheduledActivations);
                     // add all scheduled activations to invocation queue
                     invocationQueue.addAll(scheduledActivations);
+
+                    // log trace
+                    schedulingStats(scheduledActivations);
+                    resourcesStats(invokersMap);
+                    bufferStats(activationsBuffer);
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -263,7 +272,10 @@ public class BufferedScheduler extends Scheduler {
                 final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
                     // contains id of invokers that have turned healthy
-                    final List<Invoker> invokersTurnedHealthy = processHearthBeats(new ArrayList<>(heartbeats));
+                    final List<Invoker> invokersTurnedHealthy = processHearthBeats(
+                            new ArrayList<>(heartbeats),
+                            invokersMap
+                    );
                     // schedule activations to all invokers turned healthy
                     final Queue<IBufferizable> scheduledActivations = schedule(
                             activationsBuffer,
@@ -273,6 +285,11 @@ public class BufferedScheduler extends Scheduler {
                     activationsBuffer.removeAll(scheduledActivations);
                     // add all scheduled activations to invocation queue
                     invocationQueue.addAll(scheduledActivations);
+
+                    // log trace
+                    schedulingStats(scheduledActivations);
+                    resourcesStats(invokersMap);
+                    bufferStats(activationsBuffer);
                 }
                 // send activations
                 if (!invocationQueue.isEmpty()) send(invocationQueue);
@@ -309,7 +326,8 @@ public class BufferedScheduler extends Scheduler {
         ));
     }
 
-    private @Nonnull List<Invoker> processHearthBeats(@Nonnull final Collection<Health> heartBeats) {
+    private @Nonnull List<Invoker> processHearthBeats(@Nonnull final Collection<Health> heartBeats,
+                                                      @Nonnull final Map<String, Invoker> invokersMap) {
         final List<Invoker> invokersTurnedHealthy = new ArrayList<>(invokersMap.size());
         if (heartBeats.isEmpty()) return invokersTurnedHealthy;
 
@@ -345,7 +363,8 @@ public class BufferedScheduler extends Scheduler {
         return invokersTurnedHealthy;
     }
 
-    private @Nonnull List<Invoker> processCompletions(@Nonnull final Collection<Completion> completions) {
+    private @Nonnull List<Invoker> processCompletions(@Nonnull final Collection<Completion> completions,
+                                                      @Nonnull final Map<String, Invoker> invokersMap) {
         final List<Invoker> invokersWithCompletions = new ArrayList<>(invokersMap.size());
         if (completions.isEmpty()) return invokersWithCompletions;
 
@@ -413,7 +432,6 @@ public class BufferedScheduler extends Scheduler {
     }
 
     private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
-        checkNotNull(schedulables, "Schedulables to send can not be null.");
         final long schedulingTermination = Instant.now().toEpochMilli();
         schedulables.forEach(schedulable -> {
             // if activation has not target invoker, abort its processing
@@ -430,8 +448,6 @@ public class BufferedScheduler extends Scheduler {
     }
 
     private void healthCheck(long healthCheck, long offlineCheck) {
-        checkArgument(healthCheck < offlineCheck,
-                "Offline check time must be > of health check time.");
         long now = Instant.now().toEpochMilli();
         if (invokersMap.isEmpty()) return;
         synchronized (mutex) {
@@ -466,7 +482,6 @@ public class BufferedScheduler extends Scheduler {
      * @param delta time after which remove activations.
      */
     private void releaseActivationsOlderThan(long delta) {
-        checkArgument(delta >= 0, "Delta time must be >= 0.");
         final Map<String, Long> invokerOldActivationsMapTrace = new HashMap<>();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
@@ -550,24 +565,32 @@ public class BufferedScheduler extends Scheduler {
                     }
                 });
 
-        final Map<String, String> activationsScheduledTrace = activationsScheduled.stream()
+        return activationsScheduled;
+    }
+
+    private void schedulingStats(@Nonnull final Queue<IBufferizable> scheduling) {
+        final Map<String, String> activationsScheduledTrace = scheduling.stream()
                 .collect(groupingBy(IBufferizable::getTargetInvoker, toUnmodifiableList()))
                 .entrySet().stream()
                 .collect(toMap(Map.Entry::getKey, entry -> entry.getValue().size() + " actv"));
         LOG.trace("Scheduling - {}.", activationsScheduledTrace);
-        final Map<String, String> invokersResourcesTrace = invokersMap.entrySet().stream()
+    }
+
+    private void resourcesStats(@Nonnull final Map<String, Invoker> resources) {
+        final Map<String, String> invokersResourcesTrace = resources.entrySet().stream()
                 .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
                         entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
                         entry.getValue().getMemory() + " MiB remaining)"))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         LOG.trace("Resources - {}.", invokersResourcesTrace);
-        final Map<String, Integer> activationsBufferTrace = activationsBuffer.stream()
+    }
+
+    private void bufferStats(@Nonnull final Queue<IBufferizable> buffer) {
+        final Map<String, Integer> activationsBufferTrace = buffer.stream()
                 .collect(groupingBy(IBufferizable::getTargetInvoker, toUnmodifiableList()))
                 .entrySet().stream()
                 .collect(toMap(Map.Entry::getKey, entry -> entry.getValue().size()));
         LOG.trace("Buffer - {}.", activationsBufferTrace);
-
-        return activationsScheduled;
     }
 
     private @Nonnull List<Invoker> getHealthyInvokers(@Nonnull final Collection<Invoker> invokers) {
