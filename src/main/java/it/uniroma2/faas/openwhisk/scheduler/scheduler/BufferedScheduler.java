@@ -424,8 +424,8 @@ public class BufferedScheduler extends Scheduler {
         // remove old activations if buffer exceed its max size
         final int totalCapacity = buffer.size() + newActivations.size();
         if (totalCapacity > maxBufferSize) {
-            final int toRemove = totalCapacity - maxBufferSize;
-            IntStream.range(0, toRemove).forEach(i -> buffer.removeLast());
+            int toRemove = totalCapacity - maxBufferSize;
+            while (toRemove-- > 0) buffer.removeLast();
             LOG.trace("Reached buffer limit ({}) - discarding last {} activations.", maxBufferSize, toRemove);
         }
         // add all new activations
@@ -457,10 +457,8 @@ public class BufferedScheduler extends Scheduler {
         if (invokersMap.isEmpty()) return;
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
-                // invoker already in offline state, so check next invoker
-                if (invoker.getState() == OFFLINE) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as offline
-                if (now - invoker.getLastCheck() > offlineCheck) {
+                if (invoker.getState() != OFFLINE && now - invoker.getLastCheck() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
                     invoker.removeAllContainers();
@@ -469,10 +467,8 @@ public class BufferedScheduler extends Scheduler {
                     continue;
                 }
 
-                // invoker already in unhealthy state, so check next invoker
-                if (invoker.getState() == UNHEALTHY) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (now - invoker.getLastCheck() > healthCheck) {
+                if (invoker.getState() != UNHEALTHY && now - invoker.getLastCheck() > healthCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(UNHEALTHY);
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());

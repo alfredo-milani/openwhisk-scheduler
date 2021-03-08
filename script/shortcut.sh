@@ -13,6 +13,8 @@ alias kafka_ip="$(realpath "$(dirname "${BASH_SOURCE}")")/kafka_ip.sh"  # @doc: 
 #
 alias docker-build="$(realpath "$(dirname "${BASH_SOURCE}")")/docker_build.sh"  # @doc: Shortcut for docker_build.sh script
 #
+alias docker-tag-push="$(realpath "$(dirname "${BASH_SOURCE}")")/tag_n_push.sh"  # @doc: Shortcut for tag_n_push.sh script
+#
 alias sched-coll="$(realpath "$(dirname "${BASH_SOURCE}")")/stdout_collector.sh -s scheduler"  # @doc: Create a file with output of docker attach to specified container
 
 #
