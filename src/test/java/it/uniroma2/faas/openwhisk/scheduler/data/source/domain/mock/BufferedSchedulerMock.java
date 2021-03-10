@@ -56,7 +56,7 @@ public class BufferedSchedulerMock extends Scheduler {
     // <targetInvoker, Invoker>
     // invoker's kafka topic name used as unique id for invoker
     // Note: must be externally synchronized to safely access Invoker entities
-    private final Map<String, Invoker> invokersMap = new HashMap<>(24);
+    private final Map<String, Invoker> invokersMap = new LinkedHashMap<>(24);
     // contains all activations for which it was not possible to acquire resources
     private final Queue<IBufferizable> activationsBuffer = new ArrayDeque<>(maxBufferSize);
     // <controller, CompletionKafkaConsumer>
@@ -87,6 +87,8 @@ public class BufferedSchedulerMock extends Scheduler {
         this.policy = policy;
         this.producer = producer;
 
+        // OPTIMIZE: to assign scheduled activities frequency dynamically create
+        //   new BufferedScheduler constructor with required parameters
         // scheduler periodic activities
         schedulePeriodicActivities();
     }
@@ -120,7 +122,7 @@ public class BufferedSchedulerMock extends Scheduler {
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
                     .collect(toCollection(ArrayDeque::new));
-            LOG.trace("[ACT] - Processing {} newActivations objects (over {} received).",
+            LOG.trace("[ACT] - Processing {} activations objects (over {} received).",
                     newActivations.size(), data.size());
 
             if (newActivations.size() > 0) {
@@ -148,7 +150,7 @@ public class BufferedSchedulerMock extends Scheduler {
                         final Queue<IBufferizable> scheduledActivations = schedule(
                                 // apply selected policy to new activations before scheduling them
                                 (Queue<IBufferizable>) policy.apply(newActivations),
-                                getHealthyInvokers(invokersMap.values())
+                                new ArrayList<>(invokersMap.values())
                         );
                         // remove all scheduled activations
                         newActivations.removeAll(scheduledActivations);
@@ -182,9 +184,6 @@ public class BufferedSchedulerMock extends Scheduler {
                     policy.update(completions);
                     // contains id of invokers that have processed at least one completion
                     final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
-                    // remove all unhealthy invokers
-                    final List<Invoker> healthyInvokersWithCompletions = new ArrayList<>(invokersWithCompletions);
-                    healthyInvokersWithCompletions.removeAll(getUnhealthyInvokers(invokersMap.values()));
                     // for all invokers that have produced at least one completion,
                     //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
@@ -244,7 +243,7 @@ public class BufferedSchedulerMock extends Scheduler {
                     //   località implementato nel Controller)
                     final Queue<IBufferizable> scheduledActivations = schedule(
                             activationsBuffer,
-                            healthyInvokersWithCompletions
+                            invokersWithCompletions
                     );
                     // remove all scheduled activations from buffer
                     activationsBuffer.removeAll(scheduledActivations);
@@ -423,10 +422,10 @@ public class BufferedSchedulerMock extends Scheduler {
 
         final ArrayDeque<IBufferizable> buffer = new ArrayDeque<>(activationsBuffer);
         // remove old activations if buffer exceed its max size
-        final int totalCapacity = buffer.size() + newActivations.size();
-        if (totalCapacity > maxBufferSize) {
-            int toRemove = totalCapacity - maxBufferSize;
-            while (toRemove-- > 0) buffer.removeLast();
+        final int totalDemand = buffer.size() + newActivations.size();
+        if (totalDemand > maxBufferSize) {
+            int toRemove = totalDemand - maxBufferSize;
+            for (int i = 0; i < toRemove; ++i) buffer.removeLast();
             LOG.trace("Reached buffer limit ({}) - discarding last {} activations.", maxBufferSize, toRemove);
         }
         // add all new activations
@@ -536,33 +535,35 @@ public class BufferedSchedulerMock extends Scheduler {
      * Try acquire resource for all {@link ISchedulable} received in input.
      *
      * @param activations
-     * @param availableInvokers
+     * @param invokers
      * @return all {@link ISchedulable} objects for which it was possible to acquire the necessary resources.
      */
     private @Nonnull Queue<IBufferizable> schedule(@Nonnull final Queue<IBufferizable> activations,
-                                                   @Nonnull final List<Invoker> availableInvokers) {
+                                                   @Nonnull final List<Invoker> invokers) {
         final Queue<IBufferizable> activationsScheduled = new ArrayDeque<>(activations.size());
-        if (activations.isEmpty() || availableInvokers.isEmpty()) return activationsScheduled;
+        if (activations.isEmpty() || invokers.isEmpty()) return activationsScheduled;
 
-        final int availableInvokerSize = availableInvokers.size();
-        final List<Integer> stepSizes = pairwiseCoprimeNumbersUntil(availableInvokerSize);
+        final int invokersSize = invokers.size();
+        final List<Integer> stepSizes = pairwiseCoprimeNumbersUntil(invokersSize);
         activations.stream()
                 .filter(activation -> activation.getAction() != null)
                 .forEachOrdered(activation -> {
                     final int hash = generateHashFrom(activation.getAction());
-                    final int homeInvoker = hash % availableInvokerSize;
+                    final int homeInvoker = hash % invokersSize;
                     final int stepSize = stepSizes.get(hash % stepSizes.size());
 
                     int invokerIndex = homeInvoker;
-                    for (int i = 0; i < availableInvokerSize; ++i) {
-                        final Invoker invoker = availableInvokers.get(invokerIndex);
-                        if (invoker.tryAcquireMemoryAndConcurrency(activation)) {
-                            // do not use Apache OpenWhisk Controller selected invoker,
+                    for (int i = 0; i < invokersSize; ++i) {
+                        final Invoker invoker = invokers.get(invokerIndex);
+                        // TODO: consider if there are changes to be done to update invoker pool
+                        //   correctly as in ShardingContainerPoolBalancer#updateInvokers(IndexedSeq[InvokerHealth])
+                        if (invoker.isHealthy() && invoker.tryAcquireMemoryAndConcurrency(activation)) {
+                            // do not rely Apache OpenWhisk Controller selected invoker,
                             //   because its state may be corrupted by Scheduler's buffering mechanism
                             activationsScheduled.add(activation.with(invoker.getInvokerName()));
                             break;
                         } else {
-                            invokerIndex = (invokerIndex + stepSize) % availableInvokerSize;
+                            invokerIndex = (invokerIndex + stepSize) % invokersSize;
                         }
                     }
                 });
@@ -680,6 +681,10 @@ public class BufferedSchedulerMock extends Scheduler {
 
     public int getMaxBufferSize() {
         return maxBufferSize;
+    }
+
+    public void setMaxBufferSize(int maxBufferSize) {
+        this.maxBufferSize = maxBufferSize;
     }
 
 }

@@ -9,6 +9,7 @@ import java.io.*;
 import java.util.HashMap;
 import java.util.Properties;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class Config extends HashMap<String, Object> {
@@ -47,6 +48,8 @@ public class Config extends HashMap<String, Object> {
     // Scheduler buffering functionality
     public static final String K_SCHEDULER_BUFFERED = "scheduler.buffered";
     public static final boolean V_DEFAULT_SCHEDULER_BUFFERED = false;
+    public static final String K_SCHEDULER_BUFFERED_BUFFER_SIZE = "scheduler.buffered.buffer_size";
+    public static final int V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE = 1000;
     // Scheduler tracing functionality
     public static final String K_SCHEDULER_TRACER = "scheduler.tracer";
     public static final boolean V_DEFAULT_SCHEDULER_TRACER = false;
@@ -69,6 +72,7 @@ public class Config extends HashMap<String, Object> {
 
         put(K_SCHEDULER_POLICY, V_DEFAULT_SCHEDULER_POLICY);
         put(K_SCHEDULER_BUFFERED, V_DEFAULT_SCHEDULER_BUFFERED);
+        put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE);
         put(K_SCHEDULER_TRACER, V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -121,6 +125,7 @@ public class Config extends HashMap<String, Object> {
 
         putString(K_SCHEDULER_POLICY, properties.get(K_SCHEDULER_POLICY), null);
         putBoolean(K_SCHEDULER_BUFFERED, properties.get(K_SCHEDULER_BUFFERED), V_DEFAULT_SCHEDULER_BUFFERED);
+        putInteger(K_SCHEDULER_BUFFERED_BUFFER_SIZE, properties.get(K_SCHEDULER_BUFFERED_BUFFER_SIZE), V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE);
         putBoolean(K_SCHEDULER_TRACER, properties.get(K_SCHEDULER_TRACER), V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -293,6 +298,15 @@ public class Config extends HashMap<String, Object> {
 
     public void setSchedulerBuffered(boolean schedulerBuffered) {
         put(K_SCHEDULER_BUFFERED, schedulerBuffered);
+    }
+
+    public int getSchedulerBufferedBufferSize() {
+        return (int) get(K_SCHEDULER_BUFFERED_BUFFER_SIZE);
+    }
+
+    public void setBufferedSchedulerBufferSize(int bufferSize) {
+        checkArgument(bufferSize > 0, "Buffer size must be > 0.");
+        put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, bufferSize);
     }
 
     public boolean getSchedulerTracer() {

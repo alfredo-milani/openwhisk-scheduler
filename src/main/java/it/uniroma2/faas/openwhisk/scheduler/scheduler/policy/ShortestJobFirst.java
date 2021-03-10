@@ -25,6 +25,7 @@ public class ShortestJobFirst implements IPolicy {
 
     public static final Policy POLICY = Policy.SHORTEST_JOB_FIRST;
 
+    // OPTIMIZE: implement mechanism to prune too old actions
     // need external synchronization, in case of multiple threads
     private final Map<Action, Long> actionDurationMap = new HashMap<>();
 

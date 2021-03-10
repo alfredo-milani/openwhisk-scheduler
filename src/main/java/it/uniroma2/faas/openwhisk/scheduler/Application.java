@@ -53,6 +53,10 @@ public class Application implements Runnable {
                 description = "Enable buffered scheduler functionality.")
         private boolean schedulerBuffered;
 
+        @CommandLine.Option(names = {"-d", "--buffer-size"}, arity = "1",
+                description = "Buffer size. This option takes effect with BufferedScheduler.")
+        private Integer bufferSize;
+
         @CommandLine.Option(names = {"-t", "--tracer-scheduler"},
                 description = "If enabled, scheduler will trace actions belonging to composition in order to provide correct priority value.")
         private boolean schedulerTracer;
@@ -95,6 +99,8 @@ public class Application implements Runnable {
             config.setSchedulerPolicy(flags.schedulerPolicy);
         config.setSchedulerTracer(flags.schedulerTracer);
         config.setSchedulerBuffered(flags.schedulerBuffered);
+        if (flags.bufferSize != null)
+            config.setBufferedSchedulerBufferSize(flags.bufferSize);
     }
 
     private @Nonnull Config createConfig() {

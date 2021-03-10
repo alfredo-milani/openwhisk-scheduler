@@ -138,6 +138,8 @@ public class SchedulerComponent {
             scheduler = new BufferedScheduler(policy, activationsKafkaProducer);
             // set kafka bootstrap servers
             ((BufferedScheduler) scheduler).setKafkaBootstrapServers(config.getKafkaBootstrapServers());
+            // set buffer size
+            ((BufferedScheduler) scheduler).setMaxBufferSize(config.getSchedulerBufferedBufferSize());
             // register health kafka consumer
             final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500

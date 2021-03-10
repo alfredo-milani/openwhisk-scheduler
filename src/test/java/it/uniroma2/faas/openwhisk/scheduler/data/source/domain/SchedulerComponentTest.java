@@ -96,6 +96,7 @@ public class SchedulerComponentTest {
         if (bufferedSchedulerOption) {
             scheduler = new BufferedSchedulerMock(policy, activationsKafkaProducer);
             ((BufferedSchedulerMock) scheduler).setKafkaBootstrapServers("localhost:9092");
+            ((BufferedSchedulerMock) scheduler).setMaxBufferSize(500);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
