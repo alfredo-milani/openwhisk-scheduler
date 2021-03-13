@@ -183,6 +183,9 @@ public class BufferedScheduler extends Scheduler {
                     policy.update(completions);
                     // contains id of invokers that have processed at least one completion
                     final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
+                    // if no valid completion has been received, release lock immediately
+                    if (invokersWithCompletions.isEmpty()) return;
+
                     // for all invokers that have produced at least one completion,
                     //   check if there is at least one buffered activation that can be scheduled on it
                     //   (so, if it has necessary resources)
@@ -278,6 +281,10 @@ public class BufferedScheduler extends Scheduler {
                             new ArrayList<>(heartbeats),
                             invokersMap
                     );
+                    // since heart-beats arrives every seconds from invokers,
+                    //   if there is no invoker turned healthy, release lock immediately
+                    if (invokersTurnedHealthy.isEmpty()) return;
+
                     // schedule activations to all invokers turned healthy
                     final Queue<IBufferizable> scheduledActivations = schedule(
                             activationsBuffer,
@@ -354,7 +361,7 @@ public class BufferedScheduler extends Scheduler {
             // if invoker was already healthy, update its timestamp
             if (invoker.isHealthy()) {
                 invoker.setLastCheck(Instant.now().toEpochMilli());
-                // invoker has become healthy
+            // invoker has become healthy
             } else {
                 // upon receiving hearth-beat from invoker, mark that invoker as healthy
                 invoker.updateState(HEALTHY, Instant.now().toEpochMilli());

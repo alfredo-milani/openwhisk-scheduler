@@ -1,0 +1,15 @@
+- v0.0.20
+
+- v0.0.21
+
+- v0.0.22
+
+- v0.0.23 - v0.3.12
+
+- v0.0.24 - v0.3.15
+    Using 'AsyncFileAppender' in log configuration.
+    Remove some checkNotNull and Buffered stats will be computed and printed only in TRACE level.
+    Lock will be released immediately if there are no valid activations to process (completion stream and health stream).
+
+- v0.0.25 - v0.3.15
+    Using 'ConsoleAppender' in log configuration.
