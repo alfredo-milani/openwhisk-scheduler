@@ -13,8 +13,6 @@ import java.util.Collection;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 public class BaseKafkaProducer extends AbstractKafkaProducer {
 
     // TODO - prova a mettere lOG in classe base (anche nel consumer)
@@ -34,8 +32,6 @@ public class BaseKafkaProducer extends AbstractKafkaProducer {
 
     @Override
     public void produce(@Nonnull final String topic, @Nonnull final IConsumable datum) {
-        checkNotNull(topic, "Topic can not be null.");
-        checkNotNull(datum, "Data can not be null.");
         try {
             // see@ openwhisk/common/scala/src/main/scala/org/apache/openwhisk/connector/kafka/KafkaProducerConnector.scala
             //  val record = new ProducerRecord[String, String](topic, "messages", msg.serialize)
@@ -50,9 +46,6 @@ public class BaseKafkaProducer extends AbstractKafkaProducer {
     // OPTIMIZE: see@ http://cloudurable.com/blog/kafka-tutorial-kafka-producer-advanced-java-examples/index.html#:~:text=The%20Kafka%20Producer%20has%20a,acks%20to%20control%20record%20durability.
     @Override
     public void produce(@Nonnull final String topic, @Nonnull final Collection<? extends IConsumable> data) {
-        checkNotNull(topic, "Topic can not be null.");
-        checkNotNull(data, "Data can not be null.");
-
         try {
             data.forEach(c -> produce(topic, c));
         } catch (KafkaException e) {

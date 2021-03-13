@@ -10,8 +10,6 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.List;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 public class TransIdSerializer extends StdSerializer<TransId> {
 
     public TransIdSerializer() {
@@ -25,14 +23,12 @@ public class TransIdSerializer extends StdSerializer<TransId> {
     @Override
     public void serialize(@Nonnull TransId transId, JsonGenerator jsonGenerator, SerializerProvider serializerProvider)
             throws IOException {
-        checkNotNull(transId, "TransId can not be null.");
         List<Transaction> transactions = transId.getTransactions();
         writeTransactions(transactions, 0, jsonGenerator);
     }
 
     private void writeTransactions(@Nonnull List<Transaction> transactions, int index, JsonGenerator jsonGenerator)
             throws IOException {
-        checkNotNull(transactions, "Transactions can not be null.");
         if (transactions.isEmpty()) {
             jsonGenerator.writeStartArray();
             jsonGenerator.writeEndArray();

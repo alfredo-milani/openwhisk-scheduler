@@ -1,6 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config;
 
-import com.google.common.base.Preconditions;
 import it.uniroma2.faas.openwhisk.scheduler.util.ProjectSpecs;
 
 import javax.annotation.Nonnull;
@@ -88,7 +87,7 @@ public class Config extends HashMap<String, Object> {
     }
 
     public void load(@Nonnull String configurationFilename) throws IOException {
-        Preconditions.checkNotNull(
+        checkNotNull(
                 configurationFilename,
                 "ConfigurationFilename can not be null (current: %s)",
                 configurationFilename
@@ -99,7 +98,7 @@ public class Config extends HashMap<String, Object> {
     }
 
     public void load(@Nonnull InputStream configInputStream) throws IOException {
-        Preconditions.checkNotNull(
+        checkNotNull(
                 configInputStream,
                 "ConfigInputStream can not be null (current: %s)",
                 configInputStream

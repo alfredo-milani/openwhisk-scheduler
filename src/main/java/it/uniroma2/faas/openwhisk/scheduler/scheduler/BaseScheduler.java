@@ -52,9 +52,6 @@ public class BaseScheduler extends Scheduler {
 
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
-        checkNotNull(stream, "Stream can not be null.");
-        checkNotNull(data, "Data can not be null.");
-
         // TODO: in caso ci siano più consumer su threads diversi che invocano questo metodo,
         //      è necessario usare mutex
         // see@ https://stackoverflow.com/questions/3741765/ordering-threads-to-run-in-the-order-they-were-created-started
@@ -85,8 +82,6 @@ public class BaseScheduler extends Scheduler {
     }
 
     private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
-        checkNotNull(schedulables, "Schedulables to send can not be null.");
-
         final long schedulingTermination = Instant.now().toEpochMilli();
         ISchedulable schedulable = schedulables.poll();
         while (schedulable != null) {

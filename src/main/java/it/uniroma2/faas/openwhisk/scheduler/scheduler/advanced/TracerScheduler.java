@@ -14,7 +14,6 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer.EVENT_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy.DEFAULT_PRIORITY;
@@ -63,9 +62,6 @@ public class TracerScheduler extends AdvancedScheduler {
      */
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
-        checkNotNull(stream, "Stream can not be null.");
-        checkNotNull(data, "Data can not be null.");
-
         // using wildcard, without filtering ISchedulable objects, to maintain all
         //   objects types in the list ordered
         // will be traced only ITraceable objects
@@ -116,8 +112,6 @@ public class TracerScheduler extends AdvancedScheduler {
      * @param data schedulables objects.
      */
     private void traceCompositions(@Nonnull final List<?> data) {
-        checkNotNull(data, "Data can not be null.");
-
         // traceable objects are not filtered before to maintain an order list
         ListIterator<?> listIterator = data.listIterator();
         synchronized (mutex) {

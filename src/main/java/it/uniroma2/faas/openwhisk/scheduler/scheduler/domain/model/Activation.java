@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 
 // @JsonInclude(JsonInclude.Include.NON_NULL)
 public final class Activation implements ITraceable, IBufferizable {
@@ -369,8 +368,6 @@ public final class Activation implements ITraceable, IBufferizable {
     @SuppressWarnings("unchecked")
     @Override
     public @Nonnull Activation with(@Nonnull String invokerTarget) {
-        checkNotNull(invokerTarget, "Invoker target can not be null.");
-
         Map<String, Object> content;
         if (this.content == null) {
             content = new HashMap<>();

@@ -26,9 +26,6 @@ public class FilterScheduler extends AdvancedScheduler {
 
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
-        checkNotNull(stream, "Stream can not be null.");
-        checkNotNull(data, "Data can not be null.");
-
         final Collection<ISchedulable> schedulables = data.stream()
                 .filter(filter::isInstance)
                 .map(filter::cast)

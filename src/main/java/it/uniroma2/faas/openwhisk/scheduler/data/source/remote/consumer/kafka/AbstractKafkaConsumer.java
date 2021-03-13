@@ -77,7 +77,6 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
 
     @Override
     public <S> void notifyObservers(@Nonnull final Map<UUID, Collection<S>> streamToData) {
-        checkNotNull(streamToData, "Streams-data mapping can not be null.");
         List<IObserver> observers;
         synchronized (mutex) {
             if (!hasUpdates()) return;

@@ -6,7 +6,6 @@ import javax.annotation.Nonnull;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 
 public class ContainerAction {
 
@@ -34,7 +33,6 @@ public class ContainerAction {
 
     public ContainerAction(@Nonnull Action action, long concurrencyLimit,
                            long memoryLimit, long timeLimit) {
-        checkNotNull(action, "Action can not be null.");
         checkArgument(concurrencyLimit > 0, "Concurrency limit must be > 0.");
         checkArgument(memoryLimit > 0, "Memory limit must be > 0.");
         checkArgument(timeLimit > 0, "Time limit must be > 0.");
@@ -57,7 +55,6 @@ public class ContainerAction {
      * @return a {@link ContainerAction} defined from {@link IBufferizable}.
      */
     public static @Nonnull ContainerAction from(@Nonnull IBufferizable bufferizable) {
-        checkNotNull(bufferizable, "Activation can not be null.");
         checkArgument(bufferizable.getAction() != null, "Action can not be null.");
 
         long concurrencyLimit = bufferizable.getConcurrencyLimit() == null
@@ -146,7 +143,6 @@ public class ContainerAction {
     }
 
     public static @Nonnull String getActionIdFrom(@Nonnull final IBufferizable bufferizable) {
-        checkNotNull(bufferizable, "Activation can not be null.");
         checkArgument(bufferizable.getAction() != null, "Action can not be null.");
         final Action action = bufferizable.getAction();
         return String.format(ACTION_ID_TEMPLATE, action.getPath(), action.getName(), action.getVersion());

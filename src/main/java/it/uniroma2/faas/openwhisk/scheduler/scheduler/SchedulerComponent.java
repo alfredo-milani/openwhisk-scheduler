@@ -122,9 +122,11 @@ public class SchedulerComponent {
             // wait acks only from leader
             put(ProducerConfig.ACKS_CONFIG, "1");  // 1 -> leader
             put(ProducerConfig.RETRIES_CONFIG, 0);
-//            put(ProducerConfig.BATCH_SIZE_CONFIG, 16 * 1024);
-            put(ProducerConfig.LINGER_MS_CONFIG, 10);
-//            put(ProducerConfig.BUFFER_MEMORY_CONFIG, 100 * 1024);
+            // batch size up to 512 B, because test health activation contains ~600 chars
+            //   a normal activation contains ~900 chars
+            put(ProducerConfig.BATCH_SIZE_CONFIG, 512);
+            // put(ProducerConfig.LINGER_MS_CONFIG, 0);
+            // put(ProducerConfig.BUFFER_MEMORY_CONFIG, 100 * 1024);
             put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
             put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         }};

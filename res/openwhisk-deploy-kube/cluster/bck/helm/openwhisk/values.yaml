@@ -669,32 +669,20 @@ elasticsearch:
 akka:
   actorSystemTerminateTimeout: "30 s"
 
-# Redis (used by apigateway)
-redis:
-  external: false
-  imageName: "redis"
-  imageTag: "4.0"
-  imagePullPolicy: "IfNotPresent"
-  # NOTE: setting replicaCount > 1 will not work; need to add redis cluster configuration
-  replicaCount: 1
-  restartPolicy: "Always"
-  host: null
-  port: 6379
-  persistence:
-    size: 256Mi
-
 # Priority queue scheduler
 scheduler:
   external: false
-  imageName: "ow-scheduler"
-  imageTag: "0.0.11"
+  imageName: "alfredo94/ow-scheduler"
+  imageTag: "0.0.23"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"
   host: null
+  log: "trace"
   policy: pass_through
   tracing: false
   buffering: false
+  bufferSize: "1000"
   pollIntervalMs: "50"
   fetchMinBytes: "1"
   fetchMaxWaitMs: "500"
@@ -706,8 +694,8 @@ scheduler:
 # Performance reader
 analyzer:
   external: false
-  imageName: "ow-analyzer"
-  imageTag: "0.0.13"
+  imageName: "alfredo94/ow-analyzer"
+  imageTag: "0.0.1"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"

@@ -14,7 +14,7 @@ import java.io.IOException;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.System.exit;
 
-@CommandLine.Command(name = "Apache OpenWhisk Scheduler", mixinStandardHelpOptions = true,
+@CommandLine.Command(name = "ow-scheduler.jar", mixinStandardHelpOptions = true,
         versionProvider = VersionProvider.class)
 public class Application implements Runnable {
 

@@ -75,7 +75,6 @@ public class Invoker {
     }
 
     public boolean tryAcquireConcurrency(@Nonnull final IBufferizable bufferizable) {
-        checkNotNull(bufferizable, "Activation can not be null.");
         checkArgument(activationContainerMap.get(bufferizable.getActivationId()) == null,
                 "Activation ID already present in invoker");
 
@@ -95,8 +94,6 @@ public class Invoker {
     }
 
     public boolean tryAcquireMemoryAndConcurrency(@Nonnull final IBufferizable bufferizable) {
-        checkNotNull(bufferizable, "Activation can not be null.");
-
         // try acquire concurrency first
         if (tryAcquireConcurrency(bufferizable)) return true;
 
@@ -145,8 +142,6 @@ public class Invoker {
     }
 
     public void release(@Nonnull final String activationId) {
-        checkNotNull(activationId, "Activation ID can not be null.");
-
         final Map.Entry<ContainerAction, Long> containerActionTimestampEntry =
                 activationContainerMap.remove(activationId);
         if (containerActionTimestampEntry != null) {
@@ -190,8 +185,6 @@ public class Invoker {
      * @return first {@link ContainerAction} that can be removed.
      */
     private @Nullable String getFirstUnusedContainer(@Nonnull Map<String, ContainerAction> containerActionMap) {
-        checkNotNull(containerActionMap, "Container action map can not be null.");
-
         for (final Map.Entry<String, ContainerAction> containerAction : containerActionMap.entrySet()) {
             // find first unused container action and remove it
             if (containerAction.getValue().getConcurrency() == 0 &&
@@ -231,7 +224,6 @@ public class Invoker {
     }
 
     public void updateState(@Nonnull State state, long timestamp) {
-        checkNotNull(state, "State can not be null.");
         checkArgument(timestamp >= 0 && timestamp >= this.lastCheck,
                 "Timestamp must be >= 0 and >= of previous one (previous: {}).", this.lastCheck);
         this.lastCheck = timestamp;

@@ -12,6 +12,7 @@ import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -114,9 +115,6 @@ public class BufferedSchedulerMock extends Scheduler {
     @SuppressWarnings("unchecked")
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
-        checkNotNull(stream, "Stream can not be null.");
-        checkNotNull(data, "Data can not be null.");
-
         if (stream.equals(ACTIVATION_STREAM)) {
             final Collection<IBufferizable> newActivations = data.stream()
                     .filter(IBufferizable.class::isInstance)
@@ -160,9 +158,11 @@ public class BufferedSchedulerMock extends Scheduler {
                         invocationQueue.addAll(scheduledActivations);
 
                         // log trace
-                        schedulingStats(scheduledActivations);
-                        resourcesStats(invokersMap);
-                        bufferStats(activationsBuffer);
+                        if (LOG.getLevel().equals(Level.TRACE)) {
+                            schedulingStats(scheduledActivations);
+                            resourcesStats(invokersMap);
+                            bufferStats(activationsBuffer);
+                        }
                     }
                 }
                 // send activations
@@ -251,7 +251,7 @@ public class BufferedSchedulerMock extends Scheduler {
                     invocationQueue.addAll(scheduledActivations);
 
                     // log trace
-                    if (!invokersWithCompletions.isEmpty()) {
+                    if (!invokersWithCompletions.isEmpty() && LOG.getLevel().equals(Level.TRACE)) {
                         schedulingStats(scheduledActivations);
                         resourcesStats(invokersMap);
                         bufferStats(activationsBuffer);
@@ -290,7 +290,7 @@ public class BufferedSchedulerMock extends Scheduler {
                     invocationQueue.addAll(scheduledActivations);
 
                     // log trace
-                    if (!scheduledActivations.isEmpty()) {
+                    if (!scheduledActivations.isEmpty() && LOG.getLevel().equals(Level.TRACE)) {
                         schedulingStats(scheduledActivations);
                         resourcesStats(invokersMap);
                         bufferStats(activationsBuffer);
@@ -501,7 +501,6 @@ public class BufferedSchedulerMock extends Scheduler {
     }
 
     private @Nonnull CompletionKafkaConsumerMock createCompletionConsumerFrom(@Nonnull String instance) {
-        checkNotNull(instance, "Instance can not be null.");
         final String topic = String.format(TEMPLATE_COMPLETION_TOPIC, instance);
         LOG.trace("Creating new completion Kafka consumer for topic: {}.", topic);
         final CompletionKafkaConsumerMock completionKafkaConsumer = new CompletionKafkaConsumerMock(

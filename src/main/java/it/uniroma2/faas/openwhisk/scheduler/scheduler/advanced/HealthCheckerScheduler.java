@@ -15,7 +15,6 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer.HEALTH_STREAM;
 
@@ -50,9 +49,6 @@ public class HealthCheckerScheduler extends AdvancedScheduler {
 
     @Override
     public void newEvent(@Nonnull UUID stream, @Nonnull Collection<?> data) {
-        checkNotNull(stream, "Stream can not be null.");
-        checkNotNull(data, "Data can not be null.");
-
         if (stream.equals(HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
             final Collection<? extends Health> heartbeats = data.stream()
