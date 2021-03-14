@@ -392,8 +392,8 @@ public class BufferedScheduler extends Scheduler {
 
     private @Nonnull List<Invoker> processCompletions(@Nonnull final Collection<Completion> completions,
                                                       @Nonnull final Map<String, Invoker> invokersMap) {
-        final List<Invoker> invokersWithCompletions = new ArrayList<>(invokersMap.size());
-        if (completions.isEmpty()) return invokersWithCompletions;
+        final Set<Invoker> invokersWithCompletions = new HashSet<>(invokersMap.size());
+        if (completions.isEmpty()) return new ArrayList<>(invokersWithCompletions);
 
         // free resources for all received completions
         for (final Completion completion : completions) {
@@ -418,15 +418,8 @@ public class BufferedScheduler extends Scheduler {
             // there is no reference to this invoker in the system
             if (invoker == null) continue;
 
-            final long activationsCountBeforeRelease = invoker.getActivationsCount();
             // release resources associated with this completion (even if invoker is not healthy)
             invoker.release(activationId);
-            // check if activation is effectively released
-            // activations that do not need to release resource are invokerHealthTestAction
-            if (activationsCountBeforeRelease - invoker.getActivationsCount() <= 0) {
-                LOG.trace("Activation with id {} did not release any resources.", activationId);
-                continue;
-            }
 
             // add invoker to the set of invokers that have processed at least one completion
             // note that, if n completions have been received, it is not sufficient check for
@@ -435,7 +428,7 @@ public class BufferedScheduler extends Scheduler {
             invokersWithCompletions.add(invoker);
         }
 
-        return invokersWithCompletions;
+        return new ArrayList<>(invokersWithCompletions);
     }
 
     private void schedulingStats(@Nonnull final Queue<IBufferizable> scheduling) {

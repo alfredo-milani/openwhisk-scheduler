@@ -29,4 +29,4 @@
 
 - v0.0.28 - v0.3.18t --- TESTING
     v0.0.27 - v0.3.17t.
-    Added cli parameter to specify activations ratio to send to invoker, even if it is overloaded.
+    Added cli parameter to specify activations number to buffer on the invoker, even if it is overloaded.
