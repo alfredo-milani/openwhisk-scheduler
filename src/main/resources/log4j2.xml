@@ -14,8 +14,8 @@
             <PatternLayout pattern="[%-5p] | %d{dd-MM-yyyy HH:mm:ss} | [%t] - %m%n"/>
         </File>
         <Async name="AsyncAppender">
-            <AppenderRef ref="FileAppender"/>
-            <!-- <AppenderRef ref="ConsoleAppender"/> -->
+<!--            <AppenderRef ref="FileAppender"/>-->
+             <AppenderRef ref="ConsoleAppender"/>
         </Async>
 
         <!-- Async Loggers will auto-flash in batches, so switch off immediateFlush -->

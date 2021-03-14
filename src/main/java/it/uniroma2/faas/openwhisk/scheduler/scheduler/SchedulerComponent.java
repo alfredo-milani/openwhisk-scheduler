@@ -143,12 +143,12 @@ public class SchedulerComponent {
             // set buffer size
             ((BufferedScheduler) scheduler).setMaxBufferSize(config.getSchedulerBufferedBufferSize());
             // register health kafka consumer
-            final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
+            /*final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
             );
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
-            closeables.add(healthKafkaConsumer);
+            closeables.add(healthKafkaConsumer);*/
         } else {
             scheduler = new BaseScheduler(policy, activationsKafkaProducer);
         }

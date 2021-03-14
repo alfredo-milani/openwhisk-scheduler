@@ -98,12 +98,12 @@ public class SchedulerComponentTest {
             ((BufferedSchedulerMock) scheduler).setKafkaBootstrapServers("localhost:9092");
             ((BufferedSchedulerMock) scheduler).setMaxBufferSize(500);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
-            final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
+            /*final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
             );
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
-            closeables.add(healthKafkaConsumer);
+            closeables.add(healthKafkaConsumer);*/
         } else {
             scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
         }

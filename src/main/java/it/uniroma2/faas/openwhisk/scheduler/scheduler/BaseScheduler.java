@@ -11,10 +11,11 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
+import static java.util.Collections.singleton;
+import static java.util.stream.Collectors.toCollection;
 
 /**
  * BaseScheduler provides scheduling functionality only for {@link Activation} objects.
@@ -52,39 +53,27 @@ public class BaseScheduler extends Scheduler {
 
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
-        // TODO: in caso ci siano più consumer su threads diversi che invocano questo metodo,
-        //      è necessario usare mutex
         // see@ https://stackoverflow.com/questions/3741765/ordering-threads-to-run-in-the-order-they-were-created-started
         // see@ https://stackoverflow.com/questions/12286628/which-thread-will-be-the-first-to-enter-the-critical-section
 
         if (!stream.equals(ACTIVATION_STREAM)) {
-            LOG.warn("Unable to manage data type from stream {}.", stream.toString());
+            LOG.trace("Unable to manage data from stream {}.", stream.toString());
             return;
         }
 
-        final long schedulablesCount = data.stream()
-                .filter(ISchedulable.class::isInstance)
-                .count();
-        LOG.trace("Schedulables objects: {}, over {} received on stream {}.",
-                schedulablesCount, data.size(), stream.toString());
-        if (schedulablesCount <= 0) {
-            LOG.warn("No objects to schedule.");
-            return;
-        }
-
-        // IObserver and ISubject interface are decoupled from IConsumer, so <T> type could contains
-        //   non schedulables objects
-        final Collection<ISchedulable> schedulables = data.stream()
+        final Collection<ISchedulable> newActivations = data.stream()
                 .filter(ISchedulable.class::isInstance)
                 .map(ISchedulable.class::cast)
-                .collect(Collectors.toCollection(ArrayDeque::new));
-        send(policy.apply(schedulables));
+                .collect(toCollection(ArrayDeque::new));
+        LOG.trace("[ACT] Processing {} activations objects (over {} received).",
+                newActivations.size(), data.size());
+
+        if (!newActivations.isEmpty()) send(policy.apply(newActivations));
     }
 
     private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
         final long schedulingTermination = Instant.now().toEpochMilli();
-        ISchedulable schedulable = schedulables.poll();
-        while (schedulable != null) {
+        schedulables.forEach(schedulable -> {
             // if activation has not target invoker, abort its processing
             if (schedulable.getTargetInvoker() == null) {
                 LOG.warn("Invalid target invoker (null) for activation with id {}.",
@@ -93,15 +82,14 @@ public class BaseScheduler extends Scheduler {
                 LOG.trace("Writing activation with id {} in {} topic.",
                         schedulable.getActivationId(), schedulable.getTargetInvoker());
                 producer.produce(schedulable.getTargetInvoker(),
-                        Collections.singleton(schedulable.with(schedulingTermination)));
+                        singleton(schedulable.with(schedulingTermination)));
             }
-            schedulable = schedulables.poll();
-        }
+        });
     }
 
     @Override
     public void shutdown() {
-        LOG.trace("{} shutdown.", this.getClass().getSimpleName());
+        LOG.info("{} shutdown.", this.getClass().getSimpleName());
     }
 
 }

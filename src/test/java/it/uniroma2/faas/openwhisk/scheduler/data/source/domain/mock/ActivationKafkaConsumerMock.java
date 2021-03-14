@@ -104,7 +104,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
     private LineReader lineReader;
     {
         try {
-            lineReader = new LineReader(traceDebug);
+            lineReader = new LineReader(traceSJF);
         } catch (IOException e) {
             e.printStackTrace();
         }

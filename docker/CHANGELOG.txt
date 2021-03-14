@@ -6,10 +6,19 @@
 
 - v0.0.23 - v0.3.12
 
-- v0.0.24 - v0.3.15
+- v0.0.24 - v0.3.16
     Using 'AsyncFileAppender' in log configuration.
-    Remove some checkNotNull and Buffered stats will be computed and printed only in TRACE level.
+    Removed some checkNotNull and Buffered stats will be computed and printed only in TRACE level.
     Lock will be released immediately if there are no valid activations to process (completion stream and health stream).
+    Code refactor in BaseScheduler.
 
-- v0.0.25 - v0.3.15
+- v0.0.25 - v0.3.16
     Using 'ConsoleAppender' in log configuration.
+
+- v0.0.26 - v0.3.16t --- TESTING
+    Using 'ConsoleAppender' in log configuration.
+    Removed health stream. Invokers are added in the system when an activations coming from that invoker is received.
+    Buffered activations are divided per invoker. When a buffer invoker is empty, are *not* checked other invoker's buffers.
+    Lost invoker down aware: if invokers crash, Scheduler send however all activations with that invoker as invoker target.
+    Since buffer are per invoker, there is no need for hashing-algorithm: once an activation are received, an invoker is surely healthy
+    and resources on Controller are released succesfully.
