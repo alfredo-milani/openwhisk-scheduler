@@ -49,6 +49,8 @@ public class Config extends HashMap<String, Object> {
     public static final boolean V_DEFAULT_SCHEDULER_BUFFERED = false;
     public static final String K_SCHEDULER_BUFFERED_BUFFER_SIZE = "scheduler.buffered.buffer_size";
     public static final int V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE = 1000;
+    public static final String K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE = "scheduler.buffered.invoker_buffer_size";
+    public static final int V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE = 5;
     // Scheduler tracing functionality
     public static final String K_SCHEDULER_TRACER = "scheduler.tracer";
     public static final boolean V_DEFAULT_SCHEDULER_TRACER = false;
@@ -72,6 +74,7 @@ public class Config extends HashMap<String, Object> {
         put(K_SCHEDULER_POLICY, V_DEFAULT_SCHEDULER_POLICY);
         put(K_SCHEDULER_BUFFERED, V_DEFAULT_SCHEDULER_BUFFERED);
         put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE);
+        put(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE, V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE);
         put(K_SCHEDULER_TRACER, V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -125,6 +128,7 @@ public class Config extends HashMap<String, Object> {
         putString(K_SCHEDULER_POLICY, properties.get(K_SCHEDULER_POLICY), null);
         putBoolean(K_SCHEDULER_BUFFERED, properties.get(K_SCHEDULER_BUFFERED), V_DEFAULT_SCHEDULER_BUFFERED);
         putInteger(K_SCHEDULER_BUFFERED_BUFFER_SIZE, properties.get(K_SCHEDULER_BUFFERED_BUFFER_SIZE), V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE);
+        putInteger(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE, properties.get(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE), V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE);
         putBoolean(K_SCHEDULER_TRACER, properties.get(K_SCHEDULER_TRACER), V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -306,6 +310,15 @@ public class Config extends HashMap<String, Object> {
     public void setBufferedSchedulerBufferSize(int bufferSize) {
         checkArgument(bufferSize > 0, "Buffer size must be > 0.");
         put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, bufferSize);
+    }
+
+    public int getSchedulerBufferedInvokerBufferSize() {
+        return (int) get(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE);
+    }
+
+    public void setSchedulerBufferedInvokerBufferSize(int invokerBufferSize) {
+        checkArgument(invokerBufferSize > 0, "Invoker buffer size must be > 0.");
+        put(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE, invokerBufferSize);
     }
 
     public boolean getSchedulerTracer() {

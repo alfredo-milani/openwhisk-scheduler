@@ -21,15 +21,11 @@ import javax.annotation.Nullable;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
-import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.HealthKafkaConsumerMock.HEALTH_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
 import static java.util.stream.Collectors.*;
 
 public class BufferedSchedulerMock extends Scheduler {
@@ -42,6 +38,7 @@ public class BufferedSchedulerMock extends Scheduler {
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
     public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(15);
     public static final int MAX_BUFFER_SIZE = 1000;
+    public static final int INVOKER_BUFFER_SIZE = 0;
 
     // time after which an invoker is marked as unhealthy
     private long healthCheckTimeLimitMs = HEALTH_CHECK_TIME_MS;
@@ -50,6 +47,8 @@ public class BufferedSchedulerMock extends Scheduler {
     // time after which running activations on invokers are removed
     //   (security measure to not block invoker in case completion message is missing)
     private long runningActivationTimeLimitMs = RUNNING_ACTIVATION_TIME_LIMIT_MS;
+    // ratio of buffered activations which will be sent to invoker even if it is overloaded
+    private int invokerBufferSize = INVOKER_BUFFER_SIZE;
     // per invoker max queue size
     protected int maxBufferSize = MAX_BUFFER_SIZE;
     private final SchedulerExecutors schedulerExecutors = new SchedulerExecutors(THREAD_COUNT, 0);
@@ -62,6 +61,8 @@ public class BufferedSchedulerMock extends Scheduler {
     // <targetInvoker, Buffer>
     // contains a mapping between an invoker id and its buffered activations
     private final Map<String, Queue<IBufferizable>> invokerBufferMap = new HashMap<>(24);
+    // boolean represents if corresponding invoker's buffer is sorted or not
+    private final Map<String, Boolean> invokerBufferSortedMap = new HashMap<>(24);
     // <controller, CompletionKafkaConsumer>
     // contains all completion Kafka consumer associated with controllers
     private final Map<RootControllerIndex, CompletionKafkaConsumerMock> controllerCompletionConsumerMap =
@@ -116,7 +117,7 @@ public class BufferedSchedulerMock extends Scheduler {
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         if (stream.equals(ACTIVATION_STREAM)) {
-            final Collection<IBufferizable> newActivations = data.stream()
+            Collection<IBufferizable> newActivations = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
                     .collect(toCollection(ArrayDeque::new));
@@ -149,12 +150,13 @@ public class BufferedSchedulerMock extends Scheduler {
                         final Queue<IBufferizable> scheduledActivations = schedule(
                                 // apply selected policy to new activations before scheduling them
                                 (Queue<IBufferizable>) policy.apply(newActivations),
-                                invokersMap
+                                invokersMap,
+                                invokerBufferSize
                         );
                         // remove all scheduled activations
                         newActivations.removeAll(scheduledActivations);
                         // buffering remaining activations
-                        buffering(newActivations, invokerBufferMap);
+                        buffering(newActivations, invokerBufferMap, invokerBufferSortedMap);
                         // add all scheduled activations to invocation queue
                         invocationQueue.addAll(scheduledActivations);
 
@@ -185,8 +187,6 @@ public class BufferedSchedulerMock extends Scheduler {
                     policy.update(completions);
                     // contains id of invokers that have processed at least one completion
                     final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
-                    // if no valid completion has been received, release lock immediately
-                    if (invokersWithCompletions.isEmpty()) return;
 
                     // second, for all invokers that have produced at least one completion,
                     //   check if there is at least one buffered activation that can be scheduled on it
@@ -246,8 +246,25 @@ public class BufferedSchedulerMock extends Scheduler {
                     //   sono allineati e quindi il sistema funziona come di norma (sfruttando cioè il principio di
                     //   località implementato nel Controller)
                     for (final Invoker invoker : invokersWithCompletions) {
-                        final Queue<IBufferizable> invokerBuffer = invokerBufferMap.get(invoker.getInvokerName());
-                        final Queue<IBufferizable> scheduledActivations = schedule(invokerBuffer, invokersMap);
+                        final String targetInvoker = invoker.getInvokerName();
+                        Queue<IBufferizable> invokerBuffer = invokerBufferMap.get(targetInvoker);
+                        // if there is no buffer for that invoker name, that invoker is
+                        //   not yet registered in the system, so continue with iteration
+                        if (invokerBuffer == null) continue;
+                        // apply policy if buffer is not yet sorted
+                        if (!invokerBufferSortedMap.get(targetInvoker)) {
+                            invokerBufferMap.put(
+                                    targetInvoker,
+                                    invokerBuffer = (Queue<IBufferizable>) policy.apply(invokerBuffer)
+                            );
+                            invokerBufferSortedMap.put(targetInvoker, true);
+                        }
+                        // schedule activations
+                        final Queue<IBufferizable> scheduledActivations = schedule(
+                                invokerBuffer,
+                                invokersMap,
+                                invokerBufferSize
+                        );
                         // remove all scheduled activations from buffer
                         invokerBuffer.removeAll(scheduledActivations);
                         // add all scheduled activations to invocation queue
@@ -296,17 +313,18 @@ public class BufferedSchedulerMock extends Scheduler {
         ));
     }
 
-    @SuppressWarnings("unchecked")
+    // @SuppressWarnings("unchecked")
     private void buffering(@Nonnull final Collection<IBufferizable> newActivations,
-                           @Nonnull final Map<String, Queue<IBufferizable>> invokerBufferMap) {
+                           @Nonnull final Map<String, Queue<IBufferizable>> invokerBufferMap,
+                           @Nonnull final Map<String, Boolean> invokerBufferSortedMap) {
         if (newActivations.isEmpty()) return;
 
-        final Map<String, Collection<IBufferizable>> invokerActivationMap = newActivations.stream()
+        final Map<String, Queue<IBufferizable>> invokerActivationMap = newActivations.stream()
                 .collect(groupingBy(IBufferizable::getTargetInvoker, toCollection(ArrayDeque::new)));
 
-        for (final Map.Entry<String, Collection<IBufferizable>> entry : invokerActivationMap.entrySet()) {
+        for (final Map.Entry<String, Queue<IBufferizable>> entry : invokerActivationMap.entrySet()) {
             final String targetInvoker = entry.getKey();
-            final Collection<IBufferizable> newInvokerActivations = entry.getValue();
+            final Queue<IBufferizable> newInvokerActivations = entry.getValue();
 
             Queue<IBufferizable> invokerBuffer = invokerBufferMap.get(targetInvoker);
             if (invokerBuffer == null) {
@@ -324,27 +342,49 @@ public class BufferedSchedulerMock extends Scheduler {
 
             // add all new activations
             invokerBuffer.addAll(newInvokerActivations);
-            invokerBufferMap.put(targetInvoker, (Queue<IBufferizable>) policy.apply(invokerBuffer));
+            invokerBufferSortedMap.put(targetInvoker, false);
+            // invokerBufferMap.put(targetInvoker, (Queue<IBufferizable>) policy.apply(invokerBuffer));
         }
     }
 
     private @Nonnull Queue<IBufferizable> schedule(@Nonnull final Queue<IBufferizable> activations,
-                                                   @Nonnull final Map<String, Invoker> invokers) {
+                                                   @Nonnull final Map<String, Invoker> invokers,
+                                                   final int invokerBufferSize) {
         final Queue<IBufferizable> activationsScheduled = new ArrayDeque<>(activations.size());
         if (activations.isEmpty()) return activationsScheduled;
 
-        for (final IBufferizable activation : activations) {
-            final String targetInvoker = activation.getTargetInvoker();
-            Invoker invoker = invokers.get(targetInvoker);
+        final Map<String, Queue<IBufferizable>> invokerActivationMap = activations.stream()
+                .collect(groupingBy(IBufferizable::getTargetInvoker, toCollection(ArrayDeque::new)));
 
+        for (final Map.Entry<String, Queue<IBufferizable>> entry : invokerActivationMap.entrySet()) {
+            final String targetInvoker = entry.getKey();
+            final Queue<IBufferizable> newInvokerActivations = entry.getValue();
+            Invoker invoker = invokers.get(targetInvoker);
             if (invoker == null) {
                 // register new invoker
-                invokers.put(targetInvoker, invoker = new Invoker(targetInvoker, activation.getUserMemory()));
+                invokers.put(targetInvoker, invoker = new Invoker(targetInvoker,
+                        newInvokerActivations.peek().getUserMemory()));
                 LOG.trace("New invoker registered in the system: {}.", targetInvoker);
             }
 
-            if (invoker.tryAcquireMemoryAndConcurrency(activation)) {
+            Iterator<IBufferizable> newInvokerActivationsIterator = newInvokerActivations.iterator();
+            while (newInvokerActivationsIterator.hasNext()) {
+                final IBufferizable activation = newInvokerActivationsIterator.next();
+                if (invoker.tryAcquireMemoryAndConcurrency(activation)) {
+                    activationsScheduled.add(activation);
+                    newInvokerActivationsIterator.remove();
+                }
+            }
+
+            if (newInvokerActivations.isEmpty()) continue;
+
+            int remainingBufferCapacity = invokerBufferSize - invoker.getBufferSize();
+            newInvokerActivationsIterator = newInvokerActivations.iterator();
+            while (remainingBufferCapacity-- > 0 && newInvokerActivationsIterator.hasNext()) {
+                final IBufferizable activation = newInvokerActivationsIterator.next();
+                invoker.buffering(activation);
                 activationsScheduled.add(activation);
+                newInvokerActivationsIterator.remove();
             }
         }
 
@@ -411,6 +451,7 @@ public class BufferedSchedulerMock extends Scheduler {
         final Map<String, String> invokersResourcesTrace = resources.entrySet().stream()
                 .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
                         entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
+                        entry.getValue().getBufferSize() + " buf | " +
                         entry.getValue().getMemory() + " MiB remaining)"))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         LOG.trace("Resources - {}.", invokersResourcesTrace);
@@ -537,6 +578,14 @@ public class BufferedSchedulerMock extends Scheduler {
 
     public void setMaxBufferSize(int maxBufferSize) {
         this.maxBufferSize = maxBufferSize;
+    }
+
+    public int getInvokerBufferSize() {
+        return invokerBufferSize;
+    }
+
+    public void setInvokerBufferSize(int invokerBufferSize) {
+        this.invokerBufferSize = invokerBufferSize;
     }
 
 }

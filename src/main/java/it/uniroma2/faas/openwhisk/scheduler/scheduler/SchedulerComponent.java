@@ -2,7 +2,6 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
@@ -142,6 +141,8 @@ public class SchedulerComponent {
             ((BufferedScheduler) scheduler).setKafkaBootstrapServers(config.getKafkaBootstrapServers());
             // set buffer size
             ((BufferedScheduler) scheduler).setMaxBufferSize(config.getSchedulerBufferedBufferSize());
+            // set invoker buffer size
+            ((BufferedScheduler) scheduler).setInvokerBufferSize(config.getSchedulerBufferedInvokerBufferSize());
             // register health kafka consumer
             /*final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500

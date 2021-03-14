@@ -472,7 +472,7 @@ public class BufferedSchedulerv0_3_16 extends Scheduler {
                 if (invoker.getState() != OFFLINE && now - invoker.getLastCheck() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
-                    invoker.removeAllContainers();
+                    invoker.removeAllActivations();
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());
                     // continue because if invoker is offline is also unhealthy
                     continue;

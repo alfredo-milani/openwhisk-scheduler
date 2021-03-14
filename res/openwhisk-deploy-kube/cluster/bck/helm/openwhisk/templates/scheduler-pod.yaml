@@ -81,6 +81,8 @@ spec:
             name: scheduler-data
             readOnly: false
 {{- end }}
+          tty: true
+          stdin: true
           args:
             - "--log={{ .Values.scheduler.log }}"
             - "--policy={{ .Values.scheduler.policy }}"

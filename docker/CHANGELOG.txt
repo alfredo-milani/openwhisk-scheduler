@@ -22,3 +22,11 @@
     Lost invoker down aware: if invokers crash, Scheduler send however all activations with that invoker as invoker target.
     Since buffer are per invoker, there is no need for hashing-algorithm: once an activation are received, an invoker is surely healthy
     and resources on Controller are released succesfully.
+
+- v0.0.27 - v0.3.17t --- TESTING
+    As v0.0.26 - v0.3.16t.
+    Policy is applied on completions. Policy applied only if needed.
+
+- v0.0.28 - v0.3.18t --- TESTING
+    v0.0.27 - v0.3.17t.
+    Added cli parameter to specify activations ratio to send to invoker, even if it is overloaded.
