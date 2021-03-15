@@ -2,6 +2,7 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
@@ -99,11 +100,9 @@ public class SchedulerComponent {
             put(ConsumerConfig.GROUP_ID_CONFIG, "ow-scheduler-consumer");
             put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
             put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 1_000);
-            // end session after 30 s
+            // end session after 15 s
             put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 15_000);
-            // wait for 5 MiB of data
             put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, config.getKafkaFetchMinBytes());
-            // if min bytes has not reached limit, wait for 2000 ms
             put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, config.getKafkaFetchMaxWaitMs());
             // min bytes to fetch for each partition from broker server
             put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, config.getKafkaMaxPartitionFetchBytes());
@@ -133,30 +132,30 @@ public class SchedulerComponent {
 
         // define scheduler
         final IPolicy policy = PolicyFactory.createPolicy(Policy.from(config.getSchedulerPolicy()));
-        LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
+        LOG.info("Policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
         if (config.getSchedulerBuffered()) {
             scheduler = new BufferedScheduler(policy, activationsKafkaProducer);
             // set kafka bootstrap servers
             ((BufferedScheduler) scheduler).setKafkaBootstrapServers(config.getKafkaBootstrapServers());
-            // set buffer size
-            ((BufferedScheduler) scheduler).setMaxBufferSize(config.getSchedulerBufferedBufferSize());
-            // set invoker buffer size
-            ((BufferedScheduler) scheduler).setInvokerBufferSize(config.getSchedulerBufferedInvokerBufferSize());
+            // set buffer limit
+            ((BufferedScheduler) scheduler).setBufferSize(config.getSchedulerBufferedBufferSize());
+            // set overload ratio, that is the over-allocation with respect to invoker real capacity
+            ((BufferedScheduler) scheduler).setOverloadRatio(config.getSchedulerBufferedOverloadRatio());
             // register health kafka consumer
-            /*final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
-                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
+            final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
+                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, config.getSchedulerBufferedHeartbeatPoll()
             );
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
-            closeables.add(healthKafkaConsumer);*/
+            closeables.add(healthKafkaConsumer);
         } else {
             scheduler = new BaseScheduler(policy, activationsKafkaProducer);
         }
-        LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
+        LOG.info("Created scheduler {}.", scheduler.getClass().getSimpleName());
         if (config.getSchedulerTracer()) {
             scheduler = new TracerScheduler(scheduler);
-            LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
+            LOG.info("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             // register events kafka consumer
             final EventKafkaConsumer eventKafkaConsumer = new EventKafkaConsumer(
                     List.of(EVENTS_TOPIC), kafkaConsumerProperties, 500
@@ -165,21 +164,21 @@ public class SchedulerComponent {
             dataSourceConsumers.add(eventKafkaConsumer);
             closeables.add(eventKafkaConsumer);
         }
-        final Scheduler finalScheduler = scheduler;
 
         activationsKafkaConsumer.register(List.of(scheduler));
         dataSourceConsumers.add(activationsKafkaConsumer);
         closeables.addAll(List.of(activationsKafkaConsumer, activationsKafkaProducer));
 
+        final Scheduler finalScheduler = scheduler;
         // register hook to release resources
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            closeables.forEach(closeable -> {
+            for (final Closeable closeable : closeables) {
                 try {
                     closeable.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-            });
+            }
             executors.shutdown();
             finalScheduler.shutdown();
             LogManager.shutdown();

@@ -3,7 +3,10 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Instant;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -38,9 +41,6 @@ public class Invoker {
     // maintaining a mapping between activation ids and containers to fast remove activations
     // there is also a timestamp of insertion, that indicate timestamp of successfully acquired concurrency
     private final Map<String, Map.Entry<ContainerAction, Long>> activationContainerMap;
-    // buffer
-    private final Queue<IBufferizable> buffer = new ArrayDeque<>();
-
 
     // available memory
     private long memory;
@@ -114,8 +114,8 @@ public class Invoker {
             //   acquire concurrency on it and insert in the state map
             if (containerAction == null) {
                 actionContainerMap.put(actionId, ContainerAction.from(bufferizable));
-                // if there is already a container with that actionId, create new container with the same
-                //   actionId, and try acquire concurrency
+            // if there is already a container with that actionId, create new container with the same
+            //   actionId, and try acquire concurrency
             } else {
                 containerAction.createContainer();
             }
@@ -166,9 +166,6 @@ public class Invoker {
             if (containersReleased > 0) {
                 memory += containersReleased * containerAction.getMemoryLimit();
             }
-
-            // schedule next activation from buffer
-            buffer.removeIf(this::tryAcquireMemoryAndConcurrency);
         }
     }
 
@@ -179,14 +176,6 @@ public class Invoker {
                 .map(Map.Entry::getKey)
                 .collect(toUnmodifiableList())
                 .forEach(this::release);
-    }
-
-    public void buffering(@Nonnull final IBufferizable bufferizable) {
-        buffer.add(bufferizable);
-    }
-
-    public void buffering(@Nonnull final Queue<IBufferizable> bufferizables) {
-        buffer.addAll(bufferizables);
     }
 
     /**
@@ -207,10 +196,6 @@ public class Invoker {
 
     public String getInvokerName() {
         return invokerName;
-    }
-
-    public int getBufferSize() {
-        return buffer.size();
     }
 
     public long getUserMemory() {
@@ -266,8 +251,7 @@ public class Invoker {
      * Remove all registered activations and all {@link ContainerAction}s.
      * All memory became available.
      */
-    public void removeAllActivations() {
-        buffer.clear();
+    public void removeAll() {
         activationContainerMap.clear();
         actionContainerMap.clear();
         memory = userMemory;
@@ -293,7 +277,6 @@ public class Invoker {
                 ", userMemory=" + userMemory +
                 ", actionContainerMap=" + actionContainerMap +
                 ", activationContainerMap=" + activationContainerMap +
-                ", buffer=" + buffer +
                 ", memory=" + memory +
                 ", state=" + state +
                 ", update=" + lastCheck +

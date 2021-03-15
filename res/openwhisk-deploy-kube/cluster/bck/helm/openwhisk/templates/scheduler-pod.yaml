@@ -92,7 +92,7 @@ spec:
 {{- if .Values.scheduler.buffering }}
             - "--buffered-scheduler"
             - "--buffer-size={{ .Values.scheduler.bufferSize }}"
-            - "--buffer-size-invoker={{ .Values.scheduler.bufferSizeInvoker }}"
+            - "--overload-ratio={{ .Values.scheduler.overloadRatio }}"
 {{- end }}
             - "--kafka-poll-interval={{ .Values.scheduler.pollIntervalMs }}"
             - "--kafka-fetch-min-bytes={{ .Values.scheduler.fetchMinBytes }}"

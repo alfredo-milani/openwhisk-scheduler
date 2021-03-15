@@ -28,5 +28,9 @@
     Policy is applied on completions. Policy applied only if needed.
 
 - v0.0.28 - v0.3.18t --- TESTING
-    v0.0.27 - v0.3.17t.
+    As v0.0.27 - v0.3.17t.
     Added cli parameter to specify activations number to buffer on the invoker, even if it is overloaded.
+
+- v0.0.33 - v0.3.19t --- TESTING
+    As 0.0.25 - v0.3.16.
+    Add option 'overloadRatio' to specify to schedule more activations with respect to real invoker userMemory capacity.

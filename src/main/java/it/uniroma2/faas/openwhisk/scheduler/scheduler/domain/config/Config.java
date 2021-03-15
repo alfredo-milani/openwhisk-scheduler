@@ -48,9 +48,11 @@ public class Config extends HashMap<String, Object> {
     public static final String K_SCHEDULER_BUFFERED = "scheduler.buffered";
     public static final boolean V_DEFAULT_SCHEDULER_BUFFERED = false;
     public static final String K_SCHEDULER_BUFFERED_BUFFER_SIZE = "scheduler.buffered.buffer_size";
-    public static final int V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE = 1000;
-    public static final String K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE = "scheduler.buffered.invoker_buffer_size";
-    public static final int V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE = 5;
+    public static final int V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE = 1_000;
+    public static final String K_SCHEDULER_BUFFERED_OVERLOAD_RATIO = "scheduler.buffered.overload_ratio";
+    public static final float V_DEFAULT_SCHEDULER_BUFFERED_OVERLOAD_RATIO = 1;
+    public static final String K_SCHEDULER_BUFFERED_HEARTBEAT_POLL = "scheduler.buffered.heartbeat_poll";
+    public static final int V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL = 1_000;
     // Scheduler tracing functionality
     public static final String K_SCHEDULER_TRACER = "scheduler.tracer";
     public static final boolean V_DEFAULT_SCHEDULER_TRACER = false;
@@ -74,7 +76,8 @@ public class Config extends HashMap<String, Object> {
         put(K_SCHEDULER_POLICY, V_DEFAULT_SCHEDULER_POLICY);
         put(K_SCHEDULER_BUFFERED, V_DEFAULT_SCHEDULER_BUFFERED);
         put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE);
-        put(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE, V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE);
+        put(K_SCHEDULER_BUFFERED_OVERLOAD_RATIO, V_DEFAULT_SCHEDULER_BUFFERED_OVERLOAD_RATIO);
+        put(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
         put(K_SCHEDULER_TRACER, V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -128,7 +131,8 @@ public class Config extends HashMap<String, Object> {
         putString(K_SCHEDULER_POLICY, properties.get(K_SCHEDULER_POLICY), null);
         putBoolean(K_SCHEDULER_BUFFERED, properties.get(K_SCHEDULER_BUFFERED), V_DEFAULT_SCHEDULER_BUFFERED);
         putInteger(K_SCHEDULER_BUFFERED_BUFFER_SIZE, properties.get(K_SCHEDULER_BUFFERED_BUFFER_SIZE), V_DEFAULT_SCHEDULER_BUFFERED_BUFFER_SIZE);
-        putInteger(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE, properties.get(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE), V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE);
+        putFloat(K_SCHEDULER_BUFFERED_OVERLOAD_RATIO, properties.get(K_SCHEDULER_BUFFERED_OVERLOAD_RATIO), V_DEFAULT_SCHEDULER_BUFFERED_OVERLOAD_RATIO);
+        putInteger(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, properties.get(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL), V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
         putBoolean(K_SCHEDULER_TRACER, properties.get(K_SCHEDULER_TRACER), V_DEFAULT_SCHEDULER_TRACER);
     }
 
@@ -312,13 +316,22 @@ public class Config extends HashMap<String, Object> {
         put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, bufferSize);
     }
 
-    public int getSchedulerBufferedInvokerBufferSize() {
-        return (int) get(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE);
+    public float getSchedulerBufferedOverloadRatio() {
+        return (float) get(K_SCHEDULER_BUFFERED_OVERLOAD_RATIO);
     }
 
-    public void setSchedulerBufferedInvokerBufferSize(int invokerBufferSize) {
-        checkArgument(invokerBufferSize > 0, "Invoker buffer size must be > 0.");
-        put(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_SIZE, invokerBufferSize);
+    public void setSchedulerBufferedOverloadRatio(float overloadRatio) {
+        checkArgument(overloadRatio >= 1, "Overload ratio must be >= 1.");
+        put(K_SCHEDULER_BUFFERED_OVERLOAD_RATIO, overloadRatio);
+    }
+
+    public int getSchedulerBufferedHeartbeatPoll() {
+        return (int) get(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
+    }
+
+    public void setSchedulerBufferedHeartbeatPoll(int polling) {
+        checkArgument(polling >= 0, "Polling interval must be >= 0.");
+        put(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, polling);
     }
 
     public boolean getSchedulerTracer() {

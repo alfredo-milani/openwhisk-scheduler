@@ -89,7 +89,9 @@ public class TracerScheduler extends AdvancedScheduler {
             if (!activationEvents.isEmpty()) {
                 synchronized (mutex) {
                     final int sizeBeforeUpdate = compositionsMap.size();
-                    activationEvents.forEach(e -> compositionsMap.remove(e.getBody().getActivationId()));
+                    for (final ActivationEvent event : activationEvents) {
+                        compositionsMap.remove(event.getBody().getActivationId());
+                    }
                     final int sizeAfterUpdate = compositionsMap.size();
                     if (sizeBeforeUpdate > sizeAfterUpdate) {
                         LOG.trace("Removed {} activations from compositions map (actual size: {}).",

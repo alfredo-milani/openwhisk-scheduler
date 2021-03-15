@@ -15,7 +15,6 @@ import java.util.concurrent.ExecutorService;
 
 public class BaseKafkaProducer extends AbstractKafkaProducer {
 
-    // TODO - prova a mettere lOG in classe base (anche nel consumer)
     private final static Logger LOG = LogManager.getLogger(BaseKafkaProducer.class.getCanonicalName());
 
     private final ObjectMapper objectMapper;
@@ -39,7 +38,7 @@ public class BaseKafkaProducer extends AbstractKafkaProducer {
             //  IProducer to assign key dynamically
             producer.send(new ProducerRecord<>(topic, "messages", objectMapper.writeValueAsString(datum)));
         } catch (JsonProcessingException e) {
-            LOG.warn("Exception parsing Activation from consumable: " + datum.toString());
+            LOG.warn("Exception parsing Activation from consumable: {}." + datum.toString());
         }
     }
 
@@ -47,9 +46,11 @@ public class BaseKafkaProducer extends AbstractKafkaProducer {
     @Override
     public void produce(@Nonnull final String topic, @Nonnull final Collection<? extends IConsumable> data) {
         try {
-            data.forEach(c -> produce(topic, c));
+            for (final IConsumable consumable : data) {
+                produce(topic, consumable);
+            }
         } catch (KafkaException e) {
-            LOG.warn("Exception received while sending consumable to " + topic);
+            LOG.warn("Exception received while sending consumable to {}." + topic);
         }
     }
 

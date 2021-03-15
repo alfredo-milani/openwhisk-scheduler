@@ -96,15 +96,15 @@ public class SchedulerComponentTest {
         if (bufferedSchedulerOption) {
             scheduler = new BufferedSchedulerMock(policy, activationsKafkaProducer);
             ((BufferedSchedulerMock) scheduler).setKafkaBootstrapServers("localhost:9092");
-            ((BufferedSchedulerMock) scheduler).setMaxBufferSize(500);
-            ((BufferedSchedulerMock) scheduler).setInvokerBufferSize(5);
+            ((BufferedSchedulerMock) scheduler).setBufferSize(500);
+            ((BufferedSchedulerMock) scheduler).setOverloadRatio(1.125f);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
-            /*final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
-                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
+            final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
+                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 2_000
             );
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
-            closeables.add(healthKafkaConsumer);*/
+            closeables.add(healthKafkaConsumer);
         } else {
             scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
         }

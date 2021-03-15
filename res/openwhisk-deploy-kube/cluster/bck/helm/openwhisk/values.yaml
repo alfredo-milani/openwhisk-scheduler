@@ -683,6 +683,7 @@ scheduler:
   tracing: false
   buffering: false
   bufferSize: "1000"
+  overloadRatio: "1"
   pollIntervalMs: "50"
   fetchMinBytes: "1"
   fetchMaxWaitMs: "500"
