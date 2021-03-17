@@ -383,6 +383,7 @@
         { "properties": { "buffering": { "type": "boolean" } } },
         { "properties": { "bufferSize": { "type": "string" } } },
         { "properties": { "overloadRatio": { "type": "string" } } },
+        { "properties": { "heartbeatPoll": { "type": "string" } } },
         { "properties": { "pollIntervalMs": { "type": "string" } } },
         { "properties": { "fetchMinBytes": { "type": "string" } } },
         { "properties": { "fetchMaxWaitMs": { "type": "string" } } },

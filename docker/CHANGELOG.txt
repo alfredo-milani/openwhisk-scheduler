@@ -34,3 +34,9 @@
 - v0.0.33 - v0.3.19t --- TESTING
     As 0.0.25 - v0.3.16.
     Add option 'overloadRatio' to specify to schedule more activations with respect to real invoker userMemory capacity.
+
+- v0.0.34 - v0.4.0
+    As 0.0.25 - v0.3.16.
+    Buffer is sorted only when needed (on completions).
+    Health stream frequency reduced.
+    Added asynchronous producer to send activations to invokers.

@@ -18,6 +18,7 @@ class PriorityQueueFIFOPolicy implements IPolicy {
 
     @Override
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
+        if (schedulables.size() == 1) return new ArrayDeque<>(schedulables);
         return schedulables.stream()
                 .filter(s -> s != null && s.getPriority() != null)
                 .sorted(inversePriorityComparator)

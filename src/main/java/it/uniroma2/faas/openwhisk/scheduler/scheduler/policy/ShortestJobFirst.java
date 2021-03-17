@@ -32,6 +32,7 @@ public class ShortestJobFirst implements IPolicy {
     @Override
     public @Nonnull Queue<? extends ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(schedulables.size());
+        if (schedulables.size() == 1) return invocationQueue;
 
         // group received schedulables by action
         final Map<Action, Collection<ISchedulable>> actionGroupedSchedulables = schedulables.stream()

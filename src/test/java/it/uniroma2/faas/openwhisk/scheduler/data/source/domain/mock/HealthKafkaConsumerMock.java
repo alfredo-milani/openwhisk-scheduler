@@ -64,7 +64,7 @@ public class HealthKafkaConsumerMock extends AbstractKafkaConsumer<Health> {
 
         for (int i = 0; i < 10; ++i) {
             try {
-                 int invoker = random.ints(0, 3).findFirst().getAsInt();
+                 int invoker = random.ints(0, 2).findFirst().getAsInt();
 //                int invoker = 0;
                 Health activation = objectMapper.readValue(String.format(
                         recordHealth,

@@ -193,6 +193,7 @@ public class BufferedScheduler extends Scheduler {
         }
     }
 
+    // TODO: use configuration object which encapsulate all configuration's parameters needed
     public BufferedScheduler(@Nonnull final IPolicy policy, @Nonnull final IProducer producer) {
         checkNotNull(policy, "Policy can not be null.");
         checkNotNull(producer, "Producer can not be null.");
@@ -463,6 +464,15 @@ public class BufferedScheduler extends Scheduler {
             if (invoker == null) {
                 final Invoker newInvoker = new Invoker(
                         invokerTarget,
+                        // TODO: insted of using overloadRatio, implement a buffer on Invoker entity:
+                        //   - insert buffer (Queue) with bound defined at creation time
+                        //   - create method tryBuffering(IBufferizable) and
+                        //       tryAcquireFromBuffer()
+                        //   - in #schedule() first invoker.tryAcquireMemoryAndConcurrency() and then
+                        //       invoker.tryBuffering()
+                        //   - in #processCompletions(), before add 'invokersWithCompletions' and after check if
+                        //       resources are released, call invoker.tryAcquireFromBuffer() in order to remove
+                        //       activations from buffer, if it is possible
                         (long) (overloadRatio * getUserMemoryFrom(health.getInstance()))
                 );
                 // register new invoker
@@ -487,6 +497,10 @@ public class BufferedScheduler extends Scheduler {
         return invokersTurnedHealthy;
     }
 
+    // OPTIMIZE: invokers with completions should be sorted:
+    //   should be used a list with all invokers and "mark" those which have had a completion
+    //   (in order to respect hashing algorithm)
+    //   The same should be done in #processHeartbeats
     private @Nonnull List<Invoker> processCompletions(@Nonnull final Collection<Completion> completions,
                                                       @Nonnull final Map<String, Invoker> invokersMap) {
         final List<Invoker> invokersWithCompletions = new ArrayList<>(invokersMap.size());
