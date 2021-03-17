@@ -673,7 +673,7 @@ akka:
 scheduler:
   external: false
   imageName: "alfredo94/ow-scheduler"
-  imageTag: "0.0.34"
+  imageTag: "0.0.35"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
   restartPolicy: "Always"
@@ -683,7 +683,7 @@ scheduler:
   tracing: false
   buffering: false
   bufferSize: "1000"
-  overloadRatio: "1"
+  invokerBufferLimit: "0"
   heartbeatPoll: "1000"
   pollIntervalMs: "50"
   fetchMinBytes: "1"

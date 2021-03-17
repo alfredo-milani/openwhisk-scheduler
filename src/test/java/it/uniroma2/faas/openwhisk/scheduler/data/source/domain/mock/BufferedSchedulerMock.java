@@ -44,7 +44,7 @@ public class BufferedSchedulerMock extends Scheduler {
     public static final long OFFLINE_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(5);
     public static final long RUNNING_ACTIVATION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(15);
     public static final int BUFFER_SIZE = 1000;
-    public static final float OVERLOAD_RATIO = 1;
+    public static final int INVOKER_BUFFER_LIMIT = 0;
 
     // time after which an invoker is marked as unhealthy
     private long healthCheckTimeLimitMs = HEALTH_CHECK_TIME_MS;
@@ -54,7 +54,6 @@ public class BufferedSchedulerMock extends Scheduler {
     //   (security measure to not block invoker in case completion message is missing)
     private long runningActivationTimeLimitMs = RUNNING_ACTIVATION_TIME_LIMIT_MS;
     // over-allocate invoker's resource to let activations queue up on invoker
-    private float overloadRatio = OVERLOAD_RATIO;
     private final SchedulerExecutors schedulerExecutors = new SchedulerExecutors(
             THREAD_COUNT_KAFKA_COMPLETED_CONSUMERS + THREAD_COUNT_KAFKA_PRODUCERS,
             0
@@ -68,6 +67,8 @@ public class BufferedSchedulerMock extends Scheduler {
     // invoker's kafka topic name used as unique id for invoker
     // Note: must be externally synchronized to safely access Invoker entities
     private final Map<String, Invoker> invokersMap = new LinkedHashMap<>(24);
+    // invoker buffer limit
+    private int invokerBufferLimit = INVOKER_BUFFER_LIMIT;
     // activations buffer
     private final ActivationBuffer activationsBuffer;
     // <controller, CompletionKafkaConsumer>
@@ -194,6 +195,7 @@ public class BufferedSchedulerMock extends Scheduler {
         }
     }
 
+    // TODO: use configuration object which encapsulate all configuration's parameters needed
     public BufferedSchedulerMock(@Nonnull final IPolicy policy, @Nonnull final IProducer producer) {
         checkNotNull(policy, "Policy can not be null.");
         checkNotNull(producer, "Producer can not be null.");
@@ -464,7 +466,8 @@ public class BufferedSchedulerMock extends Scheduler {
             if (invoker == null) {
                 final Invoker newInvoker = new Invoker(
                         invokerTarget,
-                        (long) (overloadRatio * getUserMemoryFrom(health.getInstance()))
+                        getUserMemoryFrom(health.getInstance()),
+                        invokerBufferLimit
                 );
                 // register new invoker
                 invokersMap.put(invokerTarget, newInvoker);
@@ -488,6 +491,10 @@ public class BufferedSchedulerMock extends Scheduler {
         return invokersTurnedHealthy;
     }
 
+    // OPTIMIZE: invokers with completions should be sorted:
+    //   should be used a list with all invokers and "mark" those which have had a completion
+    //   (in order to respect hashing algorithm)
+    //   The same should be done in #processHeartbeats
     private @Nonnull List<Invoker> processCompletions(@Nonnull final Collection<Completion> completions,
                                                       @Nonnull final Map<String, Invoker> invokersMap) {
         final List<Invoker> invokersWithCompletions = new ArrayList<>(invokersMap.size());
@@ -525,6 +532,9 @@ public class BufferedSchedulerMock extends Scheduler {
                 LOG.trace("Activation with id {} did not release any resources.", activationId);
                 continue;
             }
+
+            // try to free invoker buffer if possible
+            invoker.tryAcquireFromBuffer();
 
             // add invoker to the set of invokers that have processed at least one completion
             // note that, if n completions have been received, it is not sufficient check for
@@ -658,7 +668,8 @@ public class BufferedSchedulerMock extends Scheduler {
                 final Invoker invoker = invokers.get(invokerIndex);
                 // TODO: consider if there are changes to be done to update invoker pool
                 //   correctly as in ShardingContainerPoolBalancer#updateInvokers(IndexedSeq[InvokerHealth])
-                if (invoker.isHealthy() && invoker.tryAcquireMemoryAndConcurrency(activation)) {
+                if (invoker.isHealthy() && (invoker.tryAcquireMemoryAndConcurrency(activation) ||
+                        invoker.tryBuffering(activation))) {
                     // do not rely Apache OpenWhisk Controller selected invoker,
                     //   because its state may be corrupted by Scheduler's buffering mechanism
                     activationsScheduled.add(activation.with(invoker.getInvokerName()));
@@ -684,6 +695,7 @@ public class BufferedSchedulerMock extends Scheduler {
         final Map<String, String> invokersResourcesTrace = resources.entrySet().stream()
                 .map(entry -> new AbstractMap.SimpleImmutableEntry<>(
                         entry.getKey(), "(" + entry.getValue().getActivationsCount() + " actv | " +
+                        entry.getValue().getBufferSize() + " buf | " +
                         entry.getValue().getMemory() + " MiB remaining)"))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         LOG.trace("Resources - {}.", invokersResourcesTrace);
@@ -778,12 +790,12 @@ public class BufferedSchedulerMock extends Scheduler {
         this.activationsBuffer.setCapacity(bufferSize);
     }
 
-    public float getOverloadRatio() {
-        return overloadRatio;
+    public int getInvokerBufferLimit() {
+        return this.invokerBufferLimit;
     }
 
-    public void setOverloadRatio(float overloadRatio) {
-        this.overloadRatio = overloadRatio;
+    public void setInvokerBufferLimit(int invokerBufferLimit) {
+        this.invokerBufferLimit = invokerBufferLimit;
     }
 
 }

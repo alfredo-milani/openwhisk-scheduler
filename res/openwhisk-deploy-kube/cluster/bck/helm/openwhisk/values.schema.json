@@ -382,7 +382,7 @@
         { "properties": { "tracing": { "type": "boolean" } } },
         { "properties": { "buffering": { "type": "boolean" } } },
         { "properties": { "bufferSize": { "type": "string" } } },
-        { "properties": { "overloadRatio": { "type": "string" } } },
+        { "properties": { "invokerBufferLimit": { "type": "string" } } },
         { "properties": { "heartbeatPoll": { "type": "string" } } },
         { "properties": { "pollIntervalMs": { "type": "string" } } },
         { "properties": { "fetchMinBytes": { "type": "string" } } },

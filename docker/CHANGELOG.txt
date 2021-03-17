@@ -40,3 +40,6 @@
     Buffer is sorted only when needed (on completions).
     Health stream frequency reduced.
     Added asynchronous producer to send activations to invokers.
+
+- v0.0.36 - v0.4.16
+    

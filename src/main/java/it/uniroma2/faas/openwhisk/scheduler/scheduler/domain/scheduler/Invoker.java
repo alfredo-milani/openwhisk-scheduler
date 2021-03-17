@@ -3,10 +3,7 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Instant;
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -23,6 +20,8 @@ public class Invoker {
     public static final float DEFAULT_ACTION_CONTAINER_LOAD_FACTOR = 0.70f;
     public static final long DEFAULT_ACTIVATION_CONTAINER_CAPACITY = 128;
     public static final float DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR = 0.70f;
+
+    public static final int BUFFER_LIMIT = 0;
 
     // invoker name, corresponding to invoker's activation topic
     private final String invokerName;
@@ -41,6 +40,10 @@ public class Invoker {
     // maintaining a mapping between activation ids and containers to fast remove activations
     // there is also a timestamp of insertion, that indicate timestamp of successfully acquired concurrency
     private final Map<String, Map.Entry<ContainerAction, Long>> activationContainerMap;
+    // buffer limit
+    private final int bufferLimit;
+    // invoker buffer
+    private final Queue<IBufferizable> buffer;
 
     // available memory
     private long memory;
@@ -58,8 +61,13 @@ public class Invoker {
     }
 
     public Invoker(@Nonnull String invokerName, long userMemory) {
+        this(invokerName, userMemory, BUFFER_LIMIT);
+    }
+
+    public Invoker(@Nonnull String invokerName, long userMemory, int bufferLimit) {
         checkNotNull(invokerName, "Invoker name can not be null.");
         checkArgument(userMemory > 0, "User memory must be > 0.");
+        checkArgument(bufferLimit >= 0, "Buffer limit must be >= 0.");
 
         this.invokerName = invokerName;
         this.userMemory = userMemory;
@@ -72,6 +80,8 @@ public class Invoker {
                 (int) (userMemory / MID_ACTION_CONTAINER_MEMORY_MiB * DEFAULT_ACTION_CONTAINER_LOAD_FACTOR),
                 DEFAULT_ACTIVATION_CONTAINER_LOAD_FACTOR
         );
+        this.bufferLimit = bufferLimit;
+        this.buffer = new ArrayDeque<>(bufferLimit);
     }
 
     public boolean tryAcquireConcurrency(@Nonnull final IBufferizable bufferizable) {
@@ -141,6 +151,19 @@ public class Invoker {
         return false;
     }
 
+    public boolean tryBuffering(@Nonnull final IBufferizable bufferizable) {
+        if (buffer.size() < bufferLimit) {
+            buffer.add(bufferizable);
+            return true;
+        }
+        // no more space in buffer
+        return false;
+    }
+
+    public boolean tryAcquireFromBuffer() {
+        return buffer.removeIf(this::tryAcquireMemoryAndConcurrency);
+    }
+
     public void release(@Nonnull final String activationId) {
         final Map.Entry<ContainerAction, Long> containerActionTimestampEntry =
                 activationContainerMap.remove(activationId);
@@ -166,6 +189,12 @@ public class Invoker {
             if (containersReleased > 0) {
                 memory += containersReleased * containerAction.getMemoryLimit();
             }
+        } else {
+            // try to remove activation from buffer, if any,
+            //   since it is possible that one activation is received before another,
+            //   due to network delay, and the activation that Scheduler thinks is buffered in
+            //   invoker might not be and can be executed
+            buffer.removeIf(activation -> activation.getActivationId().equals(activationId));
         }
     }
 
@@ -218,6 +247,14 @@ public class Invoker {
         return activationContainerMap.size();
     }
 
+    public int getBufferLimit() {
+        return bufferLimit;
+    }
+
+    public int getBufferSize() {
+        return buffer.size();
+    }
+
     public void updateState(@Nonnull State state) {
         updateState(state, lastCheck);
     }
@@ -254,6 +291,7 @@ public class Invoker {
     public void removeAll() {
         activationContainerMap.clear();
         actionContainerMap.clear();
+        buffer.clear();
         memory = userMemory;
     }
 

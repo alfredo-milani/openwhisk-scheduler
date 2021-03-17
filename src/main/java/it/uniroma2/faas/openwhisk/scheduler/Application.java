@@ -57,9 +57,9 @@ public class Application implements Runnable {
                 description = "Buffer size. This option takes effect with BufferedScheduler.")
         private Integer bufferSize;
 
-        @CommandLine.Option(names = {"-o", "--overload-ratio"}, arity = "1",
-                description = "Overload ratio on invoker. This option takes effect with BufferedScheduler.")
-        private Float overloadRatio;
+        @CommandLine.Option(names = {"-B", "--invoker-buffer-limit"}, arity = "1",
+                description = "Set invoker buffer limit; set to 0 to disable invoker buffering.")
+        private Integer invokerBufferLimit;
 
         @CommandLine.Option(names = {"-k", "--heartbeat-poll"}, arity = "1",
                 description = "For BufferedScheduler, set polling interval for heath kafka topic.")
@@ -109,10 +109,10 @@ public class Application implements Runnable {
         config.setSchedulerBuffered(flags.schedulerBuffered);
         if (flags.bufferSize != null)
             config.setBufferedSchedulerBufferSize(flags.bufferSize);
-        if (flags.overloadRatio != null)
-            config.setSchedulerBufferedOverloadRatio(flags.overloadRatio);
         if (flags.heartbeatPoll != null)
             config.setSchedulerBufferedHeartbeatPoll(flags.heartbeatPoll);
+        if (flags.invokerBufferLimit != null)
+            config.setSchedulerBufferedInvokerBufferLimit(flags.invokerBufferLimit);
     }
 
     private @Nonnull Config createConfig() {

@@ -140,8 +140,8 @@ public class SchedulerComponent {
             ((BufferedScheduler) scheduler).setKafkaBootstrapServers(config.getKafkaBootstrapServers());
             // set buffer limit
             ((BufferedScheduler) scheduler).setBufferSize(config.getSchedulerBufferedBufferSize());
-            // set overload ratio, that is the over-allocation with respect to invoker real capacity
-            ((BufferedScheduler) scheduler).setOverloadRatio(config.getSchedulerBufferedOverloadRatio());
+            // set invoker buffer limit
+            ((BufferedScheduler) scheduler).setInvokerBufferLimit(config.getSchedulerBufferedInvokerBufferLimit());
             // register health kafka consumer
             final HealthKafkaConsumer healthKafkaConsumer = new HealthKafkaConsumer(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, config.getSchedulerBufferedHeartbeatPoll()

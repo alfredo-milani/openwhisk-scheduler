@@ -92,7 +92,7 @@ spec:
 {{- if .Values.scheduler.buffering }}
             - "--buffered-scheduler"
             - "--buffer-size={{ .Values.scheduler.bufferSize }}"
-            - "--overload-ratio={{ .Values.scheduler.overloadRatio }}"
+            - "--invoker-buffer-limit={{ .Values.scheduler.invokerBufferLimit }}"
             - "--heartbeat-poll={{ .Values.scheduler.heartbeatPoll }}"
 {{- end }}
             - "--kafka-poll-interval={{ .Values.scheduler.pollIntervalMs }}"

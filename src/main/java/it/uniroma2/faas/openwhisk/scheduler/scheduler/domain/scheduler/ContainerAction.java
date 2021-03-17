@@ -143,7 +143,6 @@ public class ContainerAction {
     }
 
     public static @Nonnull String getActionIdFrom(@Nonnull final IBufferizable bufferizable) {
-        checkArgument(bufferizable.getAction() != null, "Action can not be null.");
         final Action action = bufferizable.getAction();
         return String.format(ACTION_ID_TEMPLATE, action.getPath(), action.getName(), action.getVersion());
     }

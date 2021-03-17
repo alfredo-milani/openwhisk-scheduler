@@ -59,9 +59,7 @@ public class ShortestJobFirst implements IPolicy {
         final Collection<BlockingCompletion> blockingCompletions = completions.stream()
                 .filter(BlockingCompletion.class::isInstance)
                 .map(BlockingCompletion.class::cast)
-                .filter(bc -> bc.getResponse() != null && bc.getResponse().getDuration() != null)
-                .filter(bc -> bc.getResponse().getName() != null && bc.getResponse().getNamespace() != null &&
-                        bc.getResponse().getVersion() != null)
+                .filter(bc -> bc.getResponse() != null)
                 .collect(Collectors.toUnmodifiableList());
 
         for (final BlockingCompletion completion : blockingCompletions) {
