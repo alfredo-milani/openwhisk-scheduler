@@ -1,10 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
 
 import javax.annotation.Nonnull;
 import java.util.*;
@@ -32,7 +29,7 @@ public class ShortestJobFirst implements IPolicy {
     @Override
     public @Nonnull Queue<? extends ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(schedulables.size());
-        if (schedulables.size() == 1) return invocationQueue;
+        if (schedulables.size() == 1) return new ArrayDeque<>(schedulables);
 
         // group received schedulables by action
         final Map<Action, Collection<ISchedulable>> actionGroupedSchedulables = schedulables.stream()
@@ -54,9 +51,9 @@ public class ShortestJobFirst implements IPolicy {
     }
 
     @Override
-    public void update(@Nonnull final Collection<? extends Completion> completions) {
+    public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
         // only blocking completions have "annotations" filed which contains action's "duration"
-        final Collection<BlockingCompletion> blockingCompletions = completions.stream()
+        final Collection<BlockingCompletion> blockingCompletions = consumables.stream()
                 .filter(BlockingCompletion.class::isInstance)
                 .map(BlockingCompletion.class::cast)
                 .filter(bc -> bc.getResponse() != null)

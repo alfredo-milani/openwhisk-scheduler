@@ -1,6 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nonnull;
@@ -18,7 +19,7 @@ class PassThroughPolicy implements IPolicy {
     }
 
     @Override
-    public void update(@Nonnull final Collection<? extends Completion> completions) {
+    public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
 
     }
 

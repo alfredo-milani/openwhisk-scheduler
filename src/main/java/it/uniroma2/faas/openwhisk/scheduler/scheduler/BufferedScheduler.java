@@ -567,8 +567,9 @@ public class BufferedScheduler extends Scheduler {
         long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
+                if (invoker.getState() == OFFLINE) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as offline
-                if (invoker.getState() != OFFLINE && now - invoker.getLastCheck() > offlineCheck) {
+                if (now - invoker.getLastCheck() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
                     invoker.removeAll();
@@ -577,8 +578,9 @@ public class BufferedScheduler extends Scheduler {
                     continue;
                 }
 
+                if (invoker.getState() == UNHEALTHY) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (invoker.getState() != UNHEALTHY && now - invoker.getLastCheck() > healthCheck) {
+                if (now - invoker.getLastCheck() > healthCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(UNHEALTHY);
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());

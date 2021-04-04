@@ -42,4 +42,10 @@
     Added asynchronous producer to send activations to invokers.
 
 - v0.0.36 - v0.4.16
-    
+    As v0.0.34 - v0.4.0.
+    Removed overloadRatio. Added invokerBufferSize. In Invoker class, added buffer and methods to manage queue on invoker. Note that, on Invoker#release is mandatory to check if the activation to remove is in Invoker#buffer or in Invoker#activationContainerMap, due to network delay. 
+    Removed null check in ShortestJobFirst.
+
+- v0.0.37 - v0.4.17
+    As v0.0.36 - v0.4.16.
+    Minor bug fix in ShortestJobFirst Policy.
