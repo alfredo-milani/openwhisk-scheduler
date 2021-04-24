@@ -1,0 +1,10 @@
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 55 & \
+wsk-act-binv one -p sleep 5 &
+sleep 1 && wsk-act-binv two -p sleep 30 & \
+sleep 2 && wsk-act-binv one -p sleep 1 &
