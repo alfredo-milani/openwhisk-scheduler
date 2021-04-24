@@ -13,7 +13,7 @@ class PriorityQueueFIFOPolicy implements IPolicy {
 
     public static final Policy POLICY = Policy.PRIORITY_QUEUE_FIFO;
 
-    // schedulable with higher priority goes first
+    // schedulable with higher priority goes first, i.e., with highest priority value (integer)
     private final Comparator<ISchedulable> inversePriorityComparator = (s1, s2) ->
             Objects.requireNonNull(s2.getPriority()).compareTo(Objects.requireNonNull(s1.getPriority()));
 

@@ -1,6 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
@@ -23,7 +22,7 @@ public interface IPolicy {
     /**
      * Update state of policy, if implemented one has one.
      *
-     * @param consumables collection of {@link Completion} needed to updated policy' state.
+     * @param consumables collection of {@link IConsumable} needed to updated policy' state.
      */
     void update(@Nonnull final Collection<? extends IConsumable> consumables);
 

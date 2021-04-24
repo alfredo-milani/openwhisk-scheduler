@@ -52,7 +52,10 @@ public class ShortestJobFirst implements IPolicy {
 
     @Override
     public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
-        // only blocking completions have "annotations" filed which contains action's "duration"
+        // only blocking completions have "annotations" field which contains action's "duration"
+        // NOTE: to use ShortestJobFirst policy even with non-blocking action, must be implemented
+        //   new Kafka consumer for topic "events" and must be enabled "user_events" in deploy configuration
+        //   see@ https://github.com/apache/openwhisk/blob/master/docs/metrics.md#user-specific-metrics
         final Collection<BlockingCompletion> blockingCompletions = consumables.stream()
                 .filter(BlockingCompletion.class::isInstance)
                 .map(BlockingCompletion.class::cast)

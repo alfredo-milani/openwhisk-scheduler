@@ -16,7 +16,7 @@ public abstract class Scheduler implements IObserver {
     @Override
     public abstract void unregister(@Nonnull List<ISubject> subjects);
 
-    // TODO: make #newEvent final and implement template method, with schedule() and send() methods ?
+    // TODO: drop abstract, make #newEvent final and implement template method, with schedule() and send() methods ?
     @Override
     public abstract void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data);
 
