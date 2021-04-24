@@ -2,7 +2,7 @@
 # ============================================================================
 # Titolo: fork.sh
 # Descrizione: Fork base environment
-# Autore: Alfredo Milani (alfredo.milani.94@gmail.com)
+# Autore: Alfredo Milani (alfredo.milani.dev@gmail.com)
 # Data: Mon Nov 19 06:03:44 CET 2018
 # Licenza: MIT License
 # Versione: 1.0.0

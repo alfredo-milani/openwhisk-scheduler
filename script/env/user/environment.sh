@@ -1,7 +1,7 @@
 # ============================================================================
 # Titolo: environment.sh
 # Descrizione: Contiene la definizione delle variabili di ambiente per una shell bash
-# Autore: Alfredo Milani (alfredo.milani.94@gmail.com)
+# Autore: Alfredo Milani (alfredo.milani.dev@gmail.com)
 # Data: Mon Nov 19 06:01:50 CET 2020
 # Licenza: MIT License
 # Versione: 1.0.0

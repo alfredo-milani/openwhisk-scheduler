@@ -1,7 +1,7 @@
 # ============================================================================
 # Titolo: faas_profiler.sh
 # Descrizione: Contiene alias utili per progetti
-# Autore: Alfredo Milani (alfredo.milani.94@gmail.com)
+# Autore: Alfredo Milani (alfredo.milani.dev@gmail.com)
 # Data: Mon Nov 19 06:04:59 CET 2020
 # Licenza: MIT License
 # Versione: 1.0.0

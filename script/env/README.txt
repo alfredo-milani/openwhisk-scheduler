@@ -1,4 +1,4 @@
-The bash_mod directory enables user to load custom bash shell environment dinamically.
+The bash_mod directory enables user to load custom bash shell environment dynamically.
 
 File ./load.sh manages to load base components contained in ./core directory.
 Directory ./core contains:

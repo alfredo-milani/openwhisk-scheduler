@@ -1,7 +1,7 @@
 # ============================================================================
 # Titolo: load.sh
 # Descrizione: Init script
-# Autore: Alfredo Milani (alfredo.milani.94@gmail.com)
+# Autore: Alfredo Milani (alfredo.milani.dev@gmail.com)
 # Data: Mon Nov 19 06:03:44 CET 2018
 # Licenza: MIT License
 # Versione: 1.0.0
@@ -110,7 +110,7 @@ EOF
 		for i in ${!bash_version_minimum_array[@]}; do
 			[[ ${bash_version_array[${i}]} -gt ${bash_version_minimum_array[${i}]} ]] && break
 			if [[ ${bash_version_array[${i}]} -lt ${bash_version_minimum_array[${i}]} ]]; then
-				printf "[ERROR] - Minimun bash version required \"${bash_version_minimum}\", current \"${bash_version}\"\n"
+				printf "[ERROR] - Minimum bash version required \"${bash_version_minimum}\", current \"${bash_version}\"\n"
 				return 1
 			fi
 		done
