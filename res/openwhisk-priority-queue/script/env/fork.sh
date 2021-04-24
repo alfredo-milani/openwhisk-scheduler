@@ -14,7 +14,7 @@
 
 CORE_DIR='.core'
 ENV_FILE='environment.sh'
-CORE_MODULES=("${CORE_DIR}" 'load.sh' 'README.txt' 'fork.sh')
+CORE_MODULES=("${CORE_DIR}" 'load.sh' 'NOTE.txt' 'fork.sh')
 
 
 usage() {

@@ -1,0 +1,118 @@
+# Tutti i valori specificati in questo file sovrascriveranno quelli presenti in 'openwhisk-deploy-kube/helm/openwhisk/values.yaml'
+whisk:
+  ingress:
+    # apiHostName: 34.95.127.122
+    apiHostPort: 443
+    apiHostProto: "https"
+    # type: Standard
+    type: LoadBalancer
+    # domain: 34.95.127.122
+    # using default setting with tls disabled
+    # tls:
+    #   enabled: true
+    #   secretenabled: true
+    #   createsecret: true
+    #   secretname: openwhisk-ingress-tls-secret
+    #   secrettype: kubernetes.io/tls
+    #   crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUREakNDQWZZQ0NRRFJCWHBrVnhMc3lqQU5CZ2txaGtpRzl3MEJBUXNGQURCSk1Rc3dDUVlEVlFRR0V3SkoKVkRFT01Bd0dBMVVFQ0F3RlNYUmhiSGt4S2pBb0Jna3Foa2lHOXcwQkNRRVdHMkZzWm5KbFpHOHViV2xzWVc1cApMamswUUdkdFlXbHNMbU52YlRBZUZ3MHlNVEF5TWpFeE5EVTNNakphRncweU1qQXlNakV4TkRVM01qSmFNRWt4CkN6QUpCZ05WQkFZVEFrbFVNUTR3REFZRFZRUUlEQVZKZEdGc2VURXFNQ2dHQ1NxR1NJYjNEUUVKQVJZYllXeG0KY21Wa2J5NXRhV3hoYm1rdU9UUkFaMjFoYVd3dVkyOXRNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QQpNSUlCQ2dLQ0FRRUF1eHc4TTJHTms1SGx4Mk5NZmdQTFh3WDJweSt4ZzNVNHhmeEd6dXUwRHJpTk1ka3YyeFV4CkxyZDNiMmlaRWptN21sZ1VKU2MyMHRMaHVOYkFMbmtzeWd3N0ZJTW5Fc1F6SlkxL2U2dFJMNkkrSVNLZ2VDbXgKNEo3TXo1SmtRQmVuQXpVMkI3b3Ryc1NNUXhRSUlBTlJpSjNyblFtaHRHd2RmNmZ4NEdUdUpFWTNBSm1hTzQ1LwpxbnNlaGNwc0UrTG13bXIxUUh4MTVOdlJ6Z2hkcU1Db2R0UlR1ckpXK3VIWVROVkp2UStKWWJJcXdLLzBpVTZYCks5WDJRVkpPZ2NET0FOdjg1Nkl1TFpvR0Exd0xVQXIvamlWU2lKV3doUFVjQmVKdHVpM3MzMWxIVGw4QjFjVTIKYmFEQzdBVndOTGVTVGZ4cjkzMVM3UlFGK3lLRzVlVWJrd0lEQVFBQk1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQgpBUUJRbjRoUmZ3TjU5U3RHcWlxRjBlTVZDQUFLWUZYOEVnWnhOU2hnZkxoU2ZhMVV4cm53K2JPbVdrRTcyaFNxCmFreFk0UDJGcWg1MzZWa09iNUIxcTh5anVwd0NMQmxkcE9yM2tsck1TTnRkU1NJbFFjbjdXU0dPTHhMOHFxbnoKeHJhYXF1djkxenhQenZHRlRieXdXbHdvclBuQU9XUU9hdU4yVUd0S01USjNWMTVodVkveU42aW93d0RrUUU5QwpHQXZqRlhNS2diaThWbCtqTnU5dGZGNEQ5T055SkV0b1JoNkFsQ2VGZ1djbWFuamlOcWlibEdCSG1rT0ZCU2RmCkoyZ1RWZGkrWmo4S3lSQTA2cnhZeERJbm5oTFNCcy9tYllrbmFhN1ZXQjcrV3NIQk5vQmhIOGhUNk1PbGQvYkwKdSs1RHFSU1B3cVA3OWhBaEZQbnNVVmlBCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    #   key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRQzdIRHd6WVkyVGtlWEgKWTB4K0E4dGZCZmFuTDdHRGRUakYvRWJPNjdRT3VJMHgyUy9iRlRFdXQzZHZhSmtTT2J1YVdCUWxKemJTMHVHNAoxc0F1ZVN6S0REc1VneWNTeERNbGpYOTdxMUV2b2o0aElxQjRLYkhnbnN6UGttUkFGNmNETlRZSHVpMnV4SXhECkZBZ2dBMUdJbmV1ZENhRzBiQjEvcC9IZ1pPNGtSamNBbVpvN2puK3FleDZGeW13VDR1YkNhdlZBZkhYazI5SE8KQ0Yyb3dLaDIxRk82c2xiNjRkaE0xVW05RDRsaHNpckFyL1NKVHBjcjFmWkJVazZCd000QTIvem5vaTR0bWdZRApYQXRRQ3YrT0pWS0lsYkNFOVJ3RjRtMjZMZXpmV1VkT1h3SFZ4VFp0b01Mc0JYQTB0NUpOL0d2M2ZWTHRGQVg3CklvYmw1UnVUQWdNQkFBRUNnZ0VCQUpTWEZxUERLOWh1TzZqOURZamhZSWNreUR6NjNpREVYWUsxRmxKSzBtSUMKWTNhYndLcGVDUUhOaHhhOVhSb2hLUCtvUk05QWRnUTBuamJZckNQNzdQckRmY09MWitNNlZsZlRKOU5CT0tiNApWQmlpVkFjNUxWNXhIYnNWeVhFd2wxd3Z6S21VUzZVSHgwK1p2OTRVWkpKMnZ0Nm1BSG0waGpTVFhiMVN5ZCtaCldqbTNnMnZVZTA5LzEwUG5PT3Z0a2YzWVlmYTdUa1JtZ2luclFkUE9mVS9ScnIwWDI5cnNROEtkTnlpTys4SXIKZTNiTksrVFhvZHcyUElDb0c4bUdILzdCY0o5anlnTENjODYvUTkyWnFQMDZScVBFbGQyUXBzUHVxc3MxV1FTbgpicmJXSkVwS1FnaU9pMmhxelJ1UCszR2tRZmkyYmlld1BpcUwvN01MODZrQ2dZRUE3cGJnSHVXZ0VUdWVRcU9kClJPS1V0V1lmaVJENUViL3FLVS9EUjN3TUNzUzFPbFdlUVIrYkxvc2NwLytwcTlQZnlOWTNNRVpYcUhBbEF5L0sKWi9PSC9sT3JYc2c4S2h3ZEowWWZRbnhyY0JzYjhPMXFScm1EdmdySkdJNWY1cVZtOFpLaW1tV2tuSElVeVJ2Kwp2OVZCeWNjMEMwdkd6ZTFJUm5BZWJGN2R1NzBDZ1lFQXlNT3IzdWZaUVZLWk02THlqUmNUYkZOR3pnVTNDVTRUCmhYK25wL2FXVFB4NzlycGtlQS9XZy94V3cxMnlWM25kYnBTWnpFdEFEV0lUSXEyaTdxaWQ0ckY2RzU5TThWUnYKZ0xyUDVnRjVWQkNqcHFCMkRGN3RHN1l0NG9kZU1GeG4yVDhieDRQamN2b3VjZE83NEVRQitYMkRJS0M3Y0dKRAppRFBSdlJXYmdZOENnWUF6ZElxRlgxUjBJdjF3dGNTWE5KNkp1S3FZYnZhb1kxRm04M0xVR2VhbTgrRjU0VGt1CkpsamJZdGtkU2tBWGRLeFFyaEpjOE82NnZ1VGNtUlAzODBlakMveHJocGVqSlVrTVRVMDBrNHpBTXJpRjcwMzYKVHN3ZzBrYW9heHczcS9oVnBTQTRXQzkySmd4aGl3NFg1VEE1Q2lNcFJJQnRyUHpuWkFyTHFISDlxUUtCZ0U1aAo3dEZwYmE0T1JKZ2ZiMWxjZ0EzVCtabm4rVlBkc3N0MVNvek9QbUl5VldlLzRBZnNEeEdhekhrY05Ndm9YV2FXCkIvSDJFenptWkpndWVLVjdHYUZ2TDBCbmtvL0tLbnAwOVVSVW9QME1QZ2lKTDIybkJpWENtK21NZGw2bFJUcFIKWkZRaUR3Uk4zeUk3eTJkRXhneVZUMFBHM1VlRVpkOWdjK3ZCNnVQTEFvR0JBTnB4cXFObXFUR21uY3EyOXFzeQpXNThrTFRXQzBrbVFjYjh6YlN4cENrSE9Vc0xBMmNVTCtiWlQrMlI0VWR3WVdmc3hpa1FCcGVxbjZXVENyTlVLCjFxaTc1Z282d014Y2JBVmlmU2dBMzdybzBTN1B6aExEdVA3Vi84SmRLTWt5WitSclMwTlN6Z3ZRRGhmVTRzMEMKOFVPZS9UT3hiSURrYnUxUXFwU0xhWWtMCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: true
+      nginx.ingress.kubernetes.io/proxy-body-size: 0
+      # kubernetes.io/ingress.global-static-ip-name: ow-cluster-ip
+  # override openwhisk's default limit
+  limits:
+    # default 60
+    actionsInvokesPerminute: 5000
+    # default 30
+    actionsInvokesConcurrent: 5000
+    # default 60
+    triggersFiresPerminute: 2000
+    # default 50
+    actionsSequenceMaxlength: 70
+    actions:
+      time:
+        min: "100ms"
+        max: "5m"
+        std: "1m"
+      memory:
+        min: "128m"
+        max: "512m"
+        std: "256m"
+      concurrency:
+        min: 1
+        max: 100
+        std: 50
+      log:
+        min: "0m"
+        max: "10m"
+        std: "10m"
+    activation:
+      payload:
+        max: "1048576"
+  containerPool:
+    # userMemory: "1024m"
+    userMemory: "2048m"
+
+invoker:
+  # to enable conucurrency (see@ https://github.com/apache/openwhisk/blob/master/docs/concurrency.md)
+  containerFactory:
+    enableConcurrency: true
+    kubernetes:
+      replicaCount: 2
+  # completely disable OpenWhisk's log processing and rely on Kubernetes-level logs of the action containers to mitigate logging overhead
+  # options: "-Dwhisk.spi.LogStoreProvider=org.apache.openwhisk.core.containerpool.logging.LogDriverLogStoreProvider"
+  # options: "-Dwhisk.containerPool.akkaClient=true"
+  options: "-Dwhisk.spi.LogStoreProvider=org.apache.openwhisk.core.containerpool.logging.LogDriverLogStoreProvider -Dwhisk.containerPool.akkaClient=true"
+
+metrics:
+  # collect system metrics, store and display them with prometheus
+  # this will automatically spin up a Prometheus server inside your cluster that will start scraping controller and invoker metrics
+  # accessing Prometheus using port forwarding: $ kubectl port-forward svc/owdev-prometheus-server 9090:9090 --namespace openwhisk
+  prometheusEnabled: false
+  # enable user metrics
+  userMetricsEnabled: false
+  # the dashboard can be accessed here: https://<whisk.ingress.apiHostName>:<whisk.ingress.apiHostPort>/monitoring/dashboards
+
+# modified controller to manage priority queue
+# controller's load balancer will send activation to 'scheduler' topic instead of 'invokerN'
+controller:
+  imageName: "alfredo94/ow-controller"
+  imageTag: "0.0.13"
+  # replicaCount: 2
+
+# Priority queue scheduler
+scheduler:
+  external: false
+  imageName: "alfredo94/ow-scheduler"
+  imageTag: "0.0.20"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+  restartPolicy: "Always"
+  host: null
+  # policy: pass_through
+  policy: priority_queue_fifo
+  tracing: false
+  buffering: true
+  bufferSize: "1000"
+  pollIntervalMs: "50"
+  fetchMinBytes: "1"
+  fetchMaxWaitMs: "500"
+  maxPartitionFetchBytes: "0"
+  port: 8080
+  persistence:
+    size: 128Mi
+
+# Performance reader
+analyzer:
+  external: false
+  imageName: "alfredo94/ow-analyzer"
+  imageTag: "0.0.1"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+  restartPolicy: "Always"
+  host: null
+  port: 8080
+  persistence:
+    size: 128Mi
