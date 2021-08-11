@@ -6,7 +6,7 @@
 
     <groupId>it.uniroma2.faas</groupId>
     <artifactId>openwhisk-scheduler</artifactId>
-    <version>0.4.20</version>
+    <version>0.4.21</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

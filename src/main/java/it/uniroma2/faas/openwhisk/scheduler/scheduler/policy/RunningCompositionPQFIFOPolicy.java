@@ -40,7 +40,7 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
     // using ConcurrentHashMap is sufficient to ensure correctness even if there are two threads operating on it
     private final Map<String, Map.Entry<Integer, Long>> compositionPriorityMap = new HashMap<>();
     // buffer containing all not scheduled composition activations
-    private Queue<ISchedulable> compositionQueue = new ArrayDeque<>();
+    private final Queue<ISchedulable> compositionQueue = new ArrayDeque<>();
     // contains activation ID cause for max compositions allowed in the system
     private final HashSet<String> runningCompositionSet = new HashSet<>();
     //
@@ -65,7 +65,7 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
 
         // TODO: manage also simple activation
         if (compositionActivations.size() != schedulables.size()) {
-            LOG.warn(String.format("Received %s activation - Processed %s activation.",
+            LOG.warn(String.format("[RCPQFIFO] Received %s activation - Processed %s activation.",
                     schedulables.size(), compositionActivations.size()));
         }
 
@@ -102,14 +102,14 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
                 final String activationId = activationEvent.getBody().getActivationId();
                 compositionPriorityMap.remove(activationId);
                 runningCompositionSet.remove(activationId);
-                LOG.trace(String.format("Removing composition %s - current size %s",
+                LOG.trace(String.format("[RCPQFIFO] Removing composition %s - current size %s",
                         activationId, compositionPriorityMap.size()));
             }
         }
         if (runningCompositionSet.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
             invocationQueue.addAll(apply(compositionQueue));
             compositionQueue.removeIf(invocationQueue::contains);
-            LOG.trace("Scheduled previously buffered composition.");
+            LOG.trace("[RCPQFIFO] Scheduled previously buffered composition.");
         }
 
         return invocationQueue;
@@ -133,14 +133,14 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
                                 activation.getCause(),
                                 new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
                         );
-                        LOG.trace("Registered new cause {} - priority {} (actual size: {}).",
+                        LOG.trace("[RCPQFIFO] Registered new cause {} - priority {} (actual size: {}).",
                                 activation.getCause(), priority, compositionPriorityMap.size());
                     // check if current activation has wrong priority
                     } else {
                         final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
                         // if priority does not match, create new object with correct priority
                         if (priorityFromCompositionMap != priority) {
-                            LOG.trace("Updating activation with id {} to priority level {} - cause {}.",
+                            LOG.trace("[RCPQFIFO] Updating activation with id {} to priority level {} - cause {}.",
                                     activation.getActivationId(), priorityFromCompositionMap, activation.getCause());
                             listIterator.set(activation.with(priorityFromCompositionMap));
                         }
@@ -190,7 +190,7 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
             compositionPriorityMap.keySet().removeAll(toRemove);
             final int sizeAfterUpdate = compositionPriorityMap.size();
             if (sizeBeforeUpdate > sizeAfterUpdate) {
-                LOG.trace("Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
+                LOG.trace("[RCPQFIFO] Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
                         sizeBeforeUpdate - sizeAfterUpdate, sizeAfterUpdate, delta);
             }
         }
