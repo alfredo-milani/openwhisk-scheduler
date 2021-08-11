@@ -49,3 +49,7 @@
 - v0.0.37 - v0.4.17
     As v0.0.36 - v0.4.16.
     Minor bug fix in ShortestJobFirst Policy.
+
+- v0.0.39 - v0.4.22
+    As v0.0.37 - v0.4.17.
+    Added RunningCompositionPQFIFO policy.

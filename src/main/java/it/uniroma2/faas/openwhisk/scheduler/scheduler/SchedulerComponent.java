@@ -87,7 +87,7 @@ public class SchedulerComponent {
         // TODO: implement custom executor service to restart threads in case of crash
         //   see@ https://aozturk.medium.com/how-to-handle-uncaught-exceptions-in-java-abf819347906
         // create global app executors
-        final SchedulerExecutors executors = new SchedulerExecutors(0, 3);
+        final SchedulerExecutors executors = new SchedulerExecutors(0, 4);
 
         // entities
         final List<Callable<String>> dataSourceConsumers = new ArrayList<>();
@@ -154,6 +154,13 @@ public class SchedulerComponent {
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
             closeables.add(healthKafkaConsumer);
+            // register events kafka consumer
+            final EventKafkaConsumer eventKafkaConsumer = new EventKafkaConsumer(
+                    List.of(EVENTS_TOPIC), kafkaConsumerProperties, 500
+            );
+            eventKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(eventKafkaConsumer);
+            closeables.add(eventKafkaConsumer);
         } else {
             scheduler = new BaseScheduler(policy, activationsKafkaProducer);
         }
