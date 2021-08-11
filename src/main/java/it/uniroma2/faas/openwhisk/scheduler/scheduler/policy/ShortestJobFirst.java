@@ -1,7 +1,10 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nonnull;
 import java.util.*;
@@ -51,7 +54,7 @@ public class ShortestJobFirst implements IPolicy {
     }
 
     @Override
-    public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
+    public Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
         // only blocking completions have "annotations" field which contains action's "duration"
         // NOTE: to use ShortestJobFirst policy even with non-blocking action, must be implemented
         //   new Kafka consumer for topic "events" and must be enabled "user_events" in deploy configuration
@@ -76,6 +79,8 @@ public class ShortestJobFirst implements IPolicy {
                 actionDurationMap.put(action, estimate(currentEstimation, newObservation));
             }
         }
+
+        return null;
     }
 
     @Override

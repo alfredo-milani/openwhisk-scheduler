@@ -2,7 +2,10 @@ package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.IBufferizable;
@@ -25,15 +28,12 @@ import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.HealthKafkaConsumerMock.HEALTH_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
 import static java.util.stream.Collectors.*;
 
 public class BufferedSchedulerMock extends Scheduler {
 
-    private final static Logger LOG = LogManager.getLogger(BufferedScheduler.class.getCanonicalName());
+    private final static Logger LOG = LogManager.getLogger(it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler.class.getCanonicalName());
 
     public static final String TEMPLATE_COMPLETION_TOPIC = "completed%s";
     // allow max 4 Apache OpeWhisk Controller instances
@@ -230,7 +230,8 @@ public class BufferedSchedulerMock extends Scheduler {
      */
     @Override
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
-        if (stream.equals(ACTIVATION_STREAM)) {
+        // TODO - implement FSM with state pattern
+        if (stream.equals(ActivationKafkaConsumer.ACTIVATION_STREAM)) {
             final Collection<IBufferizable> newActivations = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
@@ -260,6 +261,8 @@ public class BufferedSchedulerMock extends Scheduler {
                 if (!newActivations.isEmpty()) {
                     synchronized (mutex) {
                         // try to schedule new activations (acquiring resources on invokers)
+                        // note that if activationsBuffer is not empty no one activation contained in it
+                        //   can be scheduled so, when new activation arrive, try to schedule only these
                         final Queue<IBufferizable> scheduledActivations = schedule(
                                 // apply selected policy to new activations before scheduling them
                                 (Queue<IBufferizable>) policy.apply(newActivations),
@@ -284,7 +287,7 @@ public class BufferedSchedulerMock extends Scheduler {
                 if (!invocationQueue.isEmpty())
                     schedulerExecutors.networkIO().execute(() -> send(producer, invocationQueue));
             }
-        } else if (stream.equals(COMPLETION_STREAM)) {
+        } else if (stream.equals(CompletionKafkaConsumer.COMPLETION_STREAM)) {
             final Collection<Completion> completions = data.stream()
                     .filter(Completion.class::isInstance)
                     .map(Completion.class::cast)
@@ -378,7 +381,41 @@ public class BufferedSchedulerMock extends Scheduler {
                 if (!invocationQueue.isEmpty())
                     schedulerExecutors.networkIO().execute(() -> send(producer, invocationQueue));
             }
-        } else if (stream.equals(HEALTH_STREAM)) {
+        } else if (stream.equals(EventKafkaConsumer.EVENT_STREAM)) {
+            final Collection<IConsumable> events = data.stream()
+                    .filter(IConsumable.class::isInstance)
+                    .map(IConsumable.class::cast)
+                    .collect(toCollection(ArrayDeque::new));
+            LOG.trace("[EVT] - Processing {} events objects (over {} received).",
+                    events.size(), data.size());
+
+            if (!events.isEmpty()) {
+                // invocation queue
+                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
+                synchronized (mutex) {
+                    // returns previously buffered composition activations
+                    final Queue<IBufferizable> nextComposition = (Queue<IBufferizable>) policy.update(events);
+                    if (!nextComposition.isEmpty()) {
+                        invocationQueue.addAll(schedule(
+                                nextComposition,
+                                new ArrayList<>(invokersMap.values())
+                        ));
+                        // remove all scheduled activations from buffer
+                        activationsBuffer.removeAll(invocationQueue);
+
+                        // log trace
+                        if (LOG.getLevel().equals(Level.TRACE)) {
+                            schedulingStats(invocationQueue);
+                            resourcesStats(invokersMap);
+                            bufferStats(activationsBuffer.getBuffer());
+                        }
+                    }
+                }
+                // send activations
+                if (!invocationQueue.isEmpty())
+                    schedulerExecutors.networkIO().execute(() -> send(producer, invocationQueue));
+            }
+        } else if (stream.equals(HealthKafkaConsumer.HEALTH_STREAM)) {
             // TODO: manage case when an invoker get updated with more/less memory
             final Set<Health> heartbeats = data.stream()
                     .filter(Health.class::isInstance)
@@ -568,8 +605,9 @@ public class BufferedSchedulerMock extends Scheduler {
         long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
             for (final Invoker invoker : invokersMap.values()) {
+                if (invoker.getState() == OFFLINE) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as offline
-                if (invoker.getState() != OFFLINE && now - invoker.getLastCheck() > offlineCheck) {
+                if (now - invoker.getLastCheck() > offlineCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(OFFLINE);
                     invoker.removeAll();
@@ -578,8 +616,9 @@ public class BufferedSchedulerMock extends Scheduler {
                     continue;
                 }
 
+                if (invoker.getState() == UNHEALTHY) continue;
                 // if invoker has not sent hearth-beat in delta, mark it as unhealthy
-                if (invoker.getState() != UNHEALTHY && now - invoker.getLastCheck() > healthCheck) {
+                if (now - invoker.getLastCheck() > healthCheck) {
                     // timestamp of the last update will not be updated
                     invoker.updateState(UNHEALTHY);
                     LOG.trace("Invoker {} marked as {}.", invoker.getInvokerName(), invoker.getState());

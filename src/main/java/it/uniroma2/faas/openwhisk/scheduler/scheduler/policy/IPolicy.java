@@ -9,7 +9,7 @@ import java.util.Queue;
 
 public interface IPolicy {
 
-    int DEFAULT_PRIORITY = 0;
+    int DEFAULT_PRIORITY = 1;
 
     /**
      * Used to apply implemented poolicy to input {@link ISchedulable} collection.
@@ -23,8 +23,9 @@ public interface IPolicy {
      * Update state of policy, if implemented one has one.
      *
      * @param consumables collection of {@link IConsumable} needed to updated policy' state.
+     * @return
      */
-    void update(@Nonnull final Collection<? extends IConsumable> consumables);
+    Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables);
 
     /**
      * Retrieve policy type.

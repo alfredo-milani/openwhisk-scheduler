@@ -4,21 +4,21 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Queue;
 
-class PassThroughPolicy implements IPolicy {
+// TODO: Delete Advanced Scheduler TracerScheduler and implements it as policy instead
+public class CompositionTracer implements IPolicy {
 
-    public static final Policy POLICY = Policy.PASS_THROUGH;
+    public static final Policy POLICY = Policy.COMPOSITION_TRACER;
 
     @Override
-    public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
-        return new ArrayDeque<>(schedulables);
+    public @Nonnull Queue<? extends ISchedulable> apply(@Nonnull Collection<? extends ISchedulable> schedulables) {
+        return null;
     }
 
     @Override
-    public Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
+    public Queue<? extends IConsumable> update(@Nonnull Collection<? extends IConsumable> consumables) {
         return null;
     }
 

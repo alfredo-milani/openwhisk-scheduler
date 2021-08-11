@@ -53,6 +53,8 @@ public class Config extends HashMap<String, Object> {
     public static final int V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT = 0;
     public static final String K_SCHEDULER_BUFFERED_HEARTBEAT_POLL = "scheduler.buffered.heartbeat_poll";
     public static final int V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL = 1_000;
+    public static final String K_POLICY_RCPQFIFO_MAX_CMP = "policy.rcpqfifo.max_cmp";
+    public static final int V_DEFAULT_POLICY_RCPQFIFO_MAX_CMP = 16;
     // Scheduler tracing functionality
     public static final String K_SCHEDULER_TRACER = "scheduler.tracer";
     public static final boolean V_DEFAULT_SCHEDULER_TRACER = false;
@@ -79,6 +81,8 @@ public class Config extends HashMap<String, Object> {
         put(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT, V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT);
         put(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
         put(K_SCHEDULER_TRACER, V_DEFAULT_SCHEDULER_TRACER);
+
+        put(K_POLICY_RCPQFIFO_MAX_CMP, V_DEFAULT_POLICY_RCPQFIFO_MAX_CMP);
     }
 
     public void load() throws IOException {
@@ -134,6 +138,8 @@ public class Config extends HashMap<String, Object> {
         putInteger(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT, properties.get(K_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT), V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT);
         putInteger(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, properties.get(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL), V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
         putBoolean(K_SCHEDULER_TRACER, properties.get(K_SCHEDULER_TRACER), V_DEFAULT_SCHEDULER_TRACER);
+
+        putInteger(K_POLICY_RCPQFIFO_MAX_CMP, properties.get(K_POLICY_RCPQFIFO_MAX_CMP), V_DEFAULT_POLICY_RCPQFIFO_MAX_CMP);
     }
 
     private void putObject(@Nonnull String key, @Nullable Object value, @Nullable Object defaultValue) {
@@ -297,6 +303,15 @@ public class Config extends HashMap<String, Object> {
     public void setSchedulerPolicy(@Nonnull String schedulerPolicy) {
         checkNotNull(schedulerPolicy, "Scheduler policy can not be null.");
         put(K_SCHEDULER_POLICY, schedulerPolicy);
+    }
+
+    public int getPolicyRcpqfifoMaxCmp() {
+        return (int) get(K_POLICY_RCPQFIFO_MAX_CMP);
+    }
+
+    public void setPolicyRcpqfifoMaxCmp(int maxCmp) {
+        checkArgument(maxCmp > 0, "Policy RCPQFIFO max composition must be > 1.");
+        put(K_POLICY_RCPQFIFO_MAX_CMP, maxCmp);
     }
 
     public boolean getSchedulerBuffered() {

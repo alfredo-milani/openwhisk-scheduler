@@ -53,6 +53,10 @@
             <AppenderRef level="OFF" ref="AsyncAppender"/>
         </Logger>
 
+        <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.RunningCompositionPQFIFOPolicyb" additivity="false">
+            <AppenderRef level="ALL" ref="AsyncAppender"/>
+        </Logger>
+
         <Logger level="INFO" name="it.uniroma2.faas.openwhisk.scheduler.scheduler.BaseScheduler" additivity="false">
             <AppenderRef level="ALL" ref="AsyncAppender"/>
         </Logger>

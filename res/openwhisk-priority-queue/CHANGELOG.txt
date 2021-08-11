@@ -44,3 +44,13 @@ Questo file contiene un summary delle modifiche effettuate alla code base di Apa
     E' stato aggiunto il campo "kind" per indicare il runtime utilizzato per eseguire la action.
     - Modifiche: 
         - ShardingContainerPoolBalancer#publish
+
+- 0.0.14
+    - Modifica del metodo ShardinngLoadBalancer.scedule per far in modo che non vengano considerato invoker unusable
+
+- 0.0.15
+    - Eliminazione setup activation from CommonLoadBalancer
+
+- 0.0.16
+    - ShardingContainerPoolBalancer: viene sempre scelto il primo invoker in invokerToUse; setupActivation e sendActivationToInvoker agiscono normalemnte
+    - CommonLoadBalancer: invia activation verso topic 'scheduler'

@@ -299,4 +299,17 @@ public class ActivationTest {
         System.out.println(activationRecord.with(schedulingTermination));
     }
 
+    @Test
+    public void givenCompositionActivation_thenActivationRecordDeserializedCorrectly() throws Exception {
+        final ObjectMapper objectMapper = new ObjectMapper();
+
+        final String simpleAction = "{\"action\": {\"name\": \"factorization\", \"path\": \"guest\", \"version\": \"0.0.1\"}, \"activationId\": \"341bad45d1a34d6f9bad45d1a30d6fa5\", \"blocking\": false, \"content\": {\"$scheduler\": {\"kind\": \"python:3\", \"limits\": {\"concurrency\": 1, \"memory\": 256, \"timeout\": 60000, \"userMemory\": 2048}, \"priority\": 0, \"target\": \"invoker0\"}, \"number\": 385716322589040}, \"initArgs\": [], \"lockedArgs\": {}, \"revision\": \"1-559ccb00ce50c6595211d2d3fd46dcd0\", \"rootControllerIndex\": {\"asString\": \"0\", \"instanceType\": \"controller\"}, \"transid\": [\"dINrf4DrkfLQzqv4w4Jo90MAUYIuoM0z\", 1628155580255], \"user\": {\"authkey\": {\"api_key\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"}, \"limits\": {}, \"namespace\": {\"name\": \"guest\", \"uuid\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}, \"rights\": [\"READ\", \"PUT\", \"DELETE\", \"ACTIVATE\"], \"subject\": \"guest\"}}";
+        final Activation recordSimpleAction = objectMapper.readValue(simpleAction, Activation.class);
+        final String compositionAction = "{\"action\": {\"name\": \"img_man\", \"path\": \"guest\", \"version\": \"0.0.2\"}, \"activationId\": \"d1bd7fc856a54573bd7fc856a5857306\", \"blocking\": true, \"cause\": \"ae4c3ae2c2104d3b8c3ae2c2108d3b72\", \"content\": {\"$composer\": {\"openwhisk\": {\"ignore_certs\": true}, \"redis\": {\"uri\": \"redis://10.64.2.252:6379\"}}, \"$scheduler\": {\"kind\": \"nodejs:10\", \"limits\": {\"concurrency\": 10, \"memory\": 256, \"timeout\": 60000, \"userMemory\": 2048}, \"overload\": false, \"priority\": 0, \"target\": \"invoker1\"}}, \"initArgs\": [], \"lockedArgs\": {}, \"revision\": \"2-5e03f90f3b32b50df7c5cb3b36660122\", \"rootControllerIndex\": {\"asString\": \"0\", \"instanceType\": \"controller\"}, \"transid\": [\"MSYLGjgx1HXSfjmn7VmRcvX9lHGbWM6d\", 1617722325906, [\"KBqg1adAx0feAQwEjBGzPLYmnkCY8F9q\", 1617722325900]], \"user\": {\"authkey\": {\"api_key\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"}, \"limits\": {}, \"namespace\": {\"name\": \"guest\", \"uuid\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}, \"rights\": [\"READ\", \"PUT\", \"DELETE\", \"ACTIVATE\"], \"subject\": \"guest\"}}";
+        final Activation recordCompositionAction = objectMapper.readValue(compositionAction, Activation.class);
+
+        assertNull(recordSimpleAction.getCause(), "Cause of simple activation is not null!");
+        assertNotNull(recordCompositionAction.getCause(), "Cause of composition activation is null!");
+    }
+
 }

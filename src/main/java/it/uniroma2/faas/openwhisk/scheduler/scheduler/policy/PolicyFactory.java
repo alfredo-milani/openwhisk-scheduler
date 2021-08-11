@@ -16,8 +16,8 @@ public class PolicyFactory {
             case PRIORITY_QUEUE_FIFO:
                 return new PriorityQueueFIFOPolicy();
 
-            case RUNNING_COMPOSITION_FIFO:
-                return new RunningCompositionFIFOPolicy();
+            case RUNNING_COMPOSITION_PQFIFO:
+                return new RunningCompositionPQFIFOPolicy();
 
             case SHORTEST_JOB_FIRST:
                 return new ShortestJobFirst();

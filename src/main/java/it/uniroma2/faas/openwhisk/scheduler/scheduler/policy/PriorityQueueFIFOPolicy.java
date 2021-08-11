@@ -1,6 +1,5 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Completion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 
@@ -27,8 +26,8 @@ class PriorityQueueFIFOPolicy implements IPolicy {
     }
 
     @Override
-    public void update(final @Nonnull Collection<? extends IConsumable> consumables) {
-
+    public Queue<? extends IConsumable> update(final @Nonnull Collection<? extends IConsumable> consumables) {
+        return null;
     }
 
     @Override

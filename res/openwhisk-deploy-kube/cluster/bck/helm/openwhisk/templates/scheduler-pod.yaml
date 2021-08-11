@@ -86,6 +86,9 @@ spec:
           args:
             - "--log={{ .Values.scheduler.log }}"
             - "--policy={{ .Values.scheduler.policy }}"
+{{- if .Values.scheduler.rcpqfifo_max_cmp }}
+            - "--max-cmp={{ .Values.scheduler.rcpqfifo_max_cmp }}"
+{{- end }}
 {{- if .Values.scheduler.tracing }}
             - "--tracer-scheduler"
 {{- end }}

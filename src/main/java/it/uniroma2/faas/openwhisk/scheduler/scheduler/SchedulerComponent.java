@@ -10,6 +10,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config.Config;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.RunningCompositionPQFIFOPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -132,6 +133,10 @@ public class SchedulerComponent {
 
         // define scheduler
         final IPolicy policy = PolicyFactory.createPolicy(Policy.from(config.getSchedulerPolicy()));
+        if (policy.getPolicy() == Policy.RUNNING_COMPOSITION_PQFIFO) {
+            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(
+                    config.getPolicyRcpqfifoMaxCmp());
+        }
         LOG.info("Policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
         if (config.getSchedulerBuffered()) {
@@ -153,7 +158,7 @@ public class SchedulerComponent {
             scheduler = new BaseScheduler(policy, activationsKafkaProducer);
         }
         LOG.info("Created scheduler {}.", scheduler.getClass().getSimpleName());
-        if (config.getSchedulerTracer()) {
+        if (config.getSchedulerTracer()) {  // TODO - delete
             scheduler = new TracerScheduler(scheduler);
             LOG.info("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             // register events kafka consumer
