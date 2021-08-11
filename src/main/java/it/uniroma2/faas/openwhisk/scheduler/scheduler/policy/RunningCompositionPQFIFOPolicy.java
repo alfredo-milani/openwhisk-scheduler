@@ -15,12 +15,11 @@ import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.stream.Collectors.toCollection;
-import static java.util.stream.Collectors.toList;
 
 // TODO: This implementation considers only compositions, so activation
 //  without 'cause' field will be not considered
 //  (testHealthAction are not managed by policy by default)
-public class RunningCompositionPQFIFOPolicy implements IPolicy {
+public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
 
     private final static Logger LOG = LogManager.getLogger(RunningCompositionPQFIFOPolicy.class.getCanonicalName());
 
@@ -43,8 +42,6 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
     private final Queue<ISchedulable> compositionQueue = new ArrayDeque<>();
     // contains activation ID cause for max compositions allowed in the system
     private final HashSet<String> runningCompositionSet = new HashSet<>();
-    //
-    private final IPolicy PQFIFO = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
     // schedulable with higher priority goes first, i.e., with highest priority value (integer)
     private final Comparator<ISchedulable> inversePriorityComparator = (s1, s2) ->
             Objects.requireNonNull(s2.getPriority()).compareTo(Objects.requireNonNull(s1.getPriority()));
@@ -57,13 +54,13 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
         final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(schedulables.size());
 
-        final List<Activation> compositionActivations = schedulables.stream()
+        Queue<ISchedulable> compositionActivations = schedulables.stream()
                 .filter(Activation.class::isInstance)
                 .map(Activation.class::cast)
+                // TODO: manage also simple activation not generated from composition action
                 .filter(actv -> actv.getCause() != null)
-                .collect(toList());
+                .collect(toCollection(ArrayDeque::new));
 
-        // TODO: manage also simple activation
         if (compositionActivations.size() != schedulables.size()) {
             LOG.warn(String.format("[RCPQFIFO] Received %s activation - Processed %s activation.",
                     schedulables.size(), compositionActivations.size()));
@@ -71,12 +68,14 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
 
         if (compositionActivations.isEmpty()) return invocationQueue;
 
-        // update compositionActivations with correct priority traced
-        traceCompositionPriority(compositionActivations);
-        // ensure that composition limit is preserved, enqueue all other compositions
-        invocationQueue.addAll(checkCompositionLimit(compositionActivations));
-        compositionActivations.removeIf(invocationQueue::contains);
-        compositionQueue.addAll(compositionActivations);
+        synchronized (mutex) {
+            // update compositionActivations in-place with correct traced priority
+            compositionActivations = traceCompositionPriority(compositionActivations);
+            // ensure that composition limit is preserved, enqueue all other compositions
+            invocationQueue.addAll(checkCompositionLimit(compositionActivations));
+            compositionActivations.removeAll(invocationQueue);
+            compositionQueue.addAll(compositionActivations);
+        }
 
         return invocationQueue;
     }
@@ -88,7 +87,7 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
      * @return
      */
     @Override
-    public @Nonnull Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
+    public Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
         final Queue<ActivationEvent> activationEvents = consumables.stream()
                 .filter(ActivationEvent.class::isInstance)
                 .map(ActivationEvent.class::cast)
@@ -96,85 +95,99 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
                 .collect(toCollection(ArrayDeque::new));
         if (activationEvents.isEmpty()) return activationEvents;
 
-        final Queue<IConsumable> invocationQueue = new ArrayDeque<>(consumables.size());
+        final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(consumables.size());
         synchronized (mutex) {
             for (final ActivationEvent activationEvent : activationEvents) {
                 final String activationId = activationEvent.getBody().getActivationId();
                 compositionPriorityMap.remove(activationId);
                 runningCompositionSet.remove(activationId);
-                LOG.trace(String.format("[RCPQFIFO] Removing composition %s - current size %s",
+                LOG.trace(String.format("[RCPQFIFO] Update - removing composition %s - current size %s",
                         activationId, compositionPriorityMap.size()));
             }
-        }
-        if (runningCompositionSet.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
-            invocationQueue.addAll(apply(compositionQueue));
-            compositionQueue.removeIf(invocationQueue::contains);
-            LOG.trace("[RCPQFIFO] Scheduled previously buffered composition.");
+
+            if (runningCompositionSet.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
+                final Queue<ISchedulable> sortedQueue = super.apply(compositionQueue);
+                invocationQueue.addAll(checkCompositionLimit(sortedQueue));
+                compositionQueue.removeAll(invocationQueue);
+                LOG.trace(String.format("[RCPQFIFO] Scheduled %d previously buffered composition.",
+                        invocationQueue.size()));
+            }
         }
 
         return invocationQueue;
     }
 
-    private void traceCompositionPriority(final List<Activation> activations) {
-        ListIterator<Activation> listIterator = activations.listIterator();
-        synchronized (mutex) {
-            while (listIterator.hasNext()) {
-                final Activation activation = listIterator.next();
-                // if cause is not null current activation belongs to a composition
-                if (activation.getCause() != null) {
-                    final int priority = activation.getPriority() == null
-                            ? DEFAULT_PRIORITY
-                            : activation.getPriority();
-                    final Map.Entry<Integer, Long> priorityTimestampEntry =
-                            compositionPriorityMap.get(activation.getCause());
-                    // create new entry
-                    if (priorityTimestampEntry == null) {
-                        compositionPriorityMap.put(
-                                activation.getCause(),
-                                new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
-                        );
-                        LOG.trace("[RCPQFIFO] Registered new cause {} - priority {} (actual size: {}).",
-                                activation.getCause(), priority, compositionPriorityMap.size());
-                    // check if current activation has wrong priority
-                    } else {
-                        final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
-                        // if priority does not match, create new object with correct priority
-                        if (priorityFromCompositionMap != priority) {
-                            LOG.trace("[RCPQFIFO] Updating activation with id {} to priority level {} - cause {}.",
-                                    activation.getActivationId(), priorityFromCompositionMap, activation.getCause());
-                            listIterator.set(activation.with(priorityFromCompositionMap));
-                        }
-                    }
+    /**
+     * Need external synchronization
+     *
+     * @param activations
+     */
+    private @Nonnull Queue<ISchedulable> traceCompositionPriority(final Queue<ISchedulable> activations) {
+        final Queue<ISchedulable> tracedPriority = new ArrayDeque<>(activations.size());
+        for (final ISchedulable schedulable : activations) {
+            final Activation activation = (Activation) schedulable;
+            // probably the activation received does not belong to a composition
+            if (activation.getCause() == null) continue;
+
+            final int priority = activation.getPriority() == null
+                    ? DEFAULT_PRIORITY
+                    : activation.getPriority();
+            final Map.Entry<Integer, Long> priorityTimestampEntry = compositionPriorityMap.get(activation.getCause());
+            // create new entry
+            if (priorityTimestampEntry == null) {
+                compositionPriorityMap.put(
+                        activation.getCause(),
+                        new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
+                );
+                LOG.trace("[RCPQFIFO] Tracer - new cause {} registered with priority {} (actual size: {}).",
+                        activation.getCause(), priority, compositionPriorityMap.size());
+                tracedPriority.add(activation);
+            // check if current activation has wrong priority
+            } else {
+                final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
+                // if priority does not match, create new object with correct priority
+                if (priorityFromCompositionMap != priority) {
+                    LOG.trace("[RCPQFIFO] Tracer - updating activation {} with priority {}.",
+                            activation.getActivationId(), priorityFromCompositionMap);
+                    tracedPriority.add(activation.with(priorityFromCompositionMap));
                 }
-                // otherwise probably the activation received does not belongs to a composition
             }
         }
+
+        return tracedPriority;
     }
 
     /**
+     * Need external synchronization
      *
      * @param activations
      * @return
      */
-    private @Nonnull Queue<ISchedulable> checkCompositionLimit(final List<Activation> activations) {
+    private @Nonnull Queue<ISchedulable> checkCompositionLimit(final Queue<ISchedulable> activations) {
         final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(activations.size());
         if (activations.isEmpty()) return invocationQueue;
 
-        final Queue<? extends ISchedulable> sortedActivation = PQFIFO.apply(activations);
-
-        synchronized (mutex) {
-            while (runningCompositionSet.size() < runningCompositionsLimit) {
-                final Activation activation = (Activation) sortedActivation.poll();
-                if (activation == null) break;
-
-                runningCompositionSet.add(activation.getActivationId());
+        final Queue<ISchedulable> sortedActivation = super.apply(activations);
+        do {
+            final Activation activation = (Activation) sortedActivation.poll();
+//            if (activation == null) break;
+            // activation belongs to a currently running composition, so let it pass
+            if (runningCompositionSet.contains(activation.getCause())) {
+                invocationQueue.add(activation);
+            } else if (runningCompositionSet.size() < runningCompositionsLimit) {
+                runningCompositionSet.add(activation.getCause());
                 invocationQueue.add(activation);
             }
-        }
+        } while (!sortedActivation.isEmpty());
 
         return invocationQueue;
     }
 
+    /**
+     * Thread-safe
+     *
+     * @param delta
+     */
     private void removeOldEntries(long delta) {
         long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
@@ -190,7 +203,7 @@ public class RunningCompositionPQFIFOPolicy implements IPolicy {
             compositionPriorityMap.keySet().removeAll(toRemove);
             final int sizeAfterUpdate = compositionPriorityMap.size();
             if (sizeBeforeUpdate > sizeAfterUpdate) {
-                LOG.trace("[RCPQFIFO] Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
+                LOG.trace("[RCPQFIFO] Pruned {} activations from compositions map (actual size: {}) - time delta {} ms.",
                         sizeBeforeUpdate - sizeAfterUpdate, sizeAfterUpdate, delta);
             }
         }

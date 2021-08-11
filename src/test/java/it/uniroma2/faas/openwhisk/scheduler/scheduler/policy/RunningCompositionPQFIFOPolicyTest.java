@@ -93,7 +93,7 @@ public class RunningCompositionPQFIFOPolicyTest {
                 "\"statusCode\": 0, \"waitTime\": 4}, \"eventType\": \"Activation\", \"namespace\": \"guest\", " +
                 "\"source\": \"controller0\", \"subject\": \"guest\", \"timestamp\": 1617722408277, \"userId\": " +
                 "\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}";
-        final ActivationEvent activationEvent = objectMapper.readValue(String.format(eventConductorRecord, activation3.getActivationId()), ActivationEvent.class);
+        final ActivationEvent activationEvent = objectMapper.readValue(String.format(eventConductorRecord, activation3.getCause()), ActivationEvent.class);
         final Collection<ActivationEvent> events = new ArrayList<>() {{
             add(activationEvent);
         }};
@@ -247,6 +247,41 @@ public class RunningCompositionPQFIFOPolicyTest {
         final Queue<? extends IConsumable> updateInvocationQueue = policy.update(events);;
 
         assertEquals(0, updateInvocationQueue.size(), "Invocation queue size must be 0");
+    }
+
+    @Test
+    public void whenComponentActivationArrives_thenLetItGoIfCauseTraced() throws Exception {
+        final ObjectMapper objectMapper = new ObjectMapper();
+
+        // activationId: d558b9d3150a467298b9d3150a067276
+        // cause: 2dd491e759e747919491e759e7b791e9
+        final String activationRecord = "{\"action\": {\"name\": \"img_man\", \"path\": \"guest\", \"version\": \"0.0.2\"}, " +
+                "\"activationId\": \"%s\", \"blocking\": true, \"cause\": \"%s\", " +
+                "\"content\": {\"$composer\": {\"openwhisk\": {\"ignore_certs\": true}, \"redis\": {\"uri\": \"redis://10.64.2.252:6379\"}}, " +
+                "\"$scheduler\": {\"kind\": \"nodejs:10\", \"limits\": {\"concurrency\": 10, \"memory\": 256, \"timeout\": 60000, " +
+                "\"userMemory\": 2048}, \"overload\": false, \"priority\": %d, \"target\": \"invoker1\"}}, \"initArgs\": [], " +
+                "\"lockedArgs\": {}, \"revision\": \"2-5e03f90f3b32b50df7c5cb3b36660122\", \"rootControllerIndex\": " +
+                "{\"asString\": \"0\", \"instanceType\": \"controller\"}, \"transid\": [\"Q1w7PbuBTN2Ie80xVKNWT1xmI2FWNsDC\", " +
+                "1617722325467, [\"PNu7ZGEuJVY77EqCurRjt21AL3FvqdgM\", 1617722325273]], \"user\": {\"authkey\": {\"api_key\": " +
+                "\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"}, " +
+                "\"limits\": {}, \"namespace\": {\"name\": \"guest\", \"uuid\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}, " +
+                "\"rights\": [\"READ\", \"PUT\", \"DELETE\", \"ACTIVATE\"], \"subject\": \"guest\"}}";
+
+        final Activation activation3 = objectMapper.readValue(String.format(activationRecord, UUID.randomUUID(), UUID.randomUUID(), 3), Activation.class);
+        final Activation activation1 = activation3.with(1);
+        final Collection<ISchedulable> activations = new ArrayList<>() {{
+            add(activation3);
+            add(activation1);
+        }};
+
+        final int compositionLimit = 1;
+        final IPolicy policy = PolicyFactory.createPolicy(Policy.RUNNING_COMPOSITION_PQFIFO);
+        ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(compositionLimit);
+        final Queue<? extends ISchedulable> invocationQueue = policy.apply(activations);
+
+        assertEquals(2, invocationQueue.size(), "Invocation queue size must be 2");
+        assertEquals(activation3, invocationQueue.poll());
+        assertEquals(activation1, invocationQueue.poll());
     }
 
 }

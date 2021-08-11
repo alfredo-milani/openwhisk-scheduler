@@ -102,10 +102,11 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
     private final String traceSJF = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/sjf_policy/scheduler.txt";
     private final String traceDebug = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/various/scheduler.txt";
     private final String tracePriorityFIFO = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/priorityFIFO_policy/scheduler.txt";
+    private final String priorityRCPQFIFO = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/rcpqfifo_policy/scheduler.txt";
     private LineReader lineReader;
     {
         try {
-            lineReader = new LineReader(tracePriorityFIFO);
+            lineReader = new LineReader(priorityRCPQFIFO);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -130,7 +131,7 @@ public class ActivationKafkaConsumerMock extends AbstractKafkaConsumer<Activatio
             e.printStackTrace();
         }*/
 
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 12; ++i) {
             final String record = lineReader.poll();
             if (record == null) break;
             try {

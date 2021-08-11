@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
@@ -40,7 +41,7 @@ public class SchedulerComponentTest {
         Configurator.setRootLevel(Level.TRACE);
 
         // create global app executors
-        SchedulerExecutors executors = new SchedulerExecutors(3, 0);
+        final SchedulerExecutors executors = new SchedulerExecutors(0, 4);
 
         // entities
         List<Callable<String>> dataSourceConsumers = new ArrayList<>();
@@ -91,7 +92,7 @@ public class SchedulerComponentTest {
 //         final IPolicy policy = PolicyFactory.createPolicy(Policy.SHORTEST_JOB_FIRST);
         final IPolicy policy = PolicyFactory.createPolicy(Policy.RUNNING_COMPOSITION_PQFIFO);
         if (policy.getPolicy() == Policy.RUNNING_COMPOSITION_PQFIFO) {
-            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(1);
+            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(100);
         }
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
@@ -110,6 +111,13 @@ public class SchedulerComponentTest {
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
             closeables.add(healthKafkaConsumer);
+            // register events kafka consumer
+            final EventKafkaConsumerMock eventKafkaConsumer = new EventKafkaConsumerMock(
+                    List.of(EVENT_TOPIC), kafkaConsumerProperties, 500
+            );
+            eventKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(eventKafkaConsumer);
+            closeables.add(eventKafkaConsumer);
         } else {
             scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
         }
@@ -147,23 +155,25 @@ public class SchedulerComponentTest {
         dataSourceConsumers.add(activationsKafkaConsumer);
         closeables.addAll(List.of(activationsKafkaConsumer, activationsKafkaProducer));
 
+        final Scheduler finalScheduler = scheduler;
         // register hook to release resources
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            closeables.forEach(closeable -> {
+            for (final Closeable closeable : closeables) {
                 try {
                     closeable.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-            });
+            }
             executors.shutdown();
+            finalScheduler.shutdown();
             LogManager.shutdown();
         }));
 
         try {
             // see@ https://stackoverflow.com/questions/20495414/thread-join-equivalent-in-executor
             // invokeAll() blocks until all tasks are completed
-            executors.networkIO().invokeAll(dataSourceConsumers);
+            Objects.requireNonNull(executors.computation()).invokeAll(dataSourceConsumers);
         } catch (InterruptedException e) {
             LOG.fatal("Scheduler interrupted: {}.", e.getMessage());
             exit(1);

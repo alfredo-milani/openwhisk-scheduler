@@ -49,7 +49,7 @@ public class EventKafkaConsumerMock extends AbstractKafkaConsumer<Event> {
     private LineReader lineReader;
     {
         try {
-            lineReader = new LineReader("/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/tracer_scheduler/events.txt");
+            lineReader = new LineReader("/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/rcpqfifo_policy/events.txt");
         } catch (IOException e) {
             e.printStackTrace();
         }
