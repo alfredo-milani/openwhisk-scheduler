@@ -62,7 +62,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
                 .collect(toCollection(ArrayDeque::new));
 
         if (compositionActivations.size() != schedulables.size()) {
-            LOG.warn(String.format("[RCPQFIFO] Received %s activation - Processed %s activation.",
+            LOG.warn(String.format("[RCPQFIFO] Apply - Received %s activation - Processed %s activation.",
                     schedulables.size(), compositionActivations.size()));
         }
 
@@ -106,10 +106,9 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
             }
 
             if (runningCompositionSet.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
-                final Queue<ISchedulable> sortedQueue = super.apply(compositionQueue);
-                invocationQueue.addAll(checkCompositionLimit(sortedQueue));
+                invocationQueue.addAll(checkCompositionLimit(compositionQueue));
                 compositionQueue.removeAll(invocationQueue);
-                LOG.trace(String.format("[RCPQFIFO] Scheduled %d previously buffered composition.",
+                LOG.trace(String.format("[RCPQFIFO] Update - Scheduled %d previously buffered composition.",
                         invocationQueue.size()));
             }
         }
@@ -126,21 +125,22 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
         final Queue<ISchedulable> tracedPriority = new ArrayDeque<>(activations.size());
         for (final ISchedulable schedulable : activations) {
             final Activation activation = (Activation) schedulable;
+            final String cause = activation.getCause();
             // probably the activation received does not belong to a composition
-            if (activation.getCause() == null) continue;
+//            if (cause == null) continue;
 
             final int priority = activation.getPriority() == null
                     ? DEFAULT_PRIORITY
                     : activation.getPriority();
-            final Map.Entry<Integer, Long> priorityTimestampEntry = compositionPriorityMap.get(activation.getCause());
+            final Map.Entry<Integer, Long> priorityTimestampEntry = compositionPriorityMap.get(cause);
             // create new entry
             if (priorityTimestampEntry == null) {
                 compositionPriorityMap.put(
-                        activation.getCause(),
+                        cause,
                         new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
                 );
                 LOG.trace("[RCPQFIFO] Tracer - new cause {} registered with priority {} (actual size: {}).",
-                        activation.getCause(), priority, compositionPriorityMap.size());
+                        cause, priority, compositionPriorityMap.size());
                 tracedPriority.add(activation);
             // check if current activation has wrong priority
             } else {
@@ -168,9 +168,8 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
         if (activations.isEmpty()) return invocationQueue;
 
         final Queue<ISchedulable> sortedActivation = super.apply(activations);
-        do {
+        while (!sortedActivation.isEmpty()) {
             final Activation activation = (Activation) sortedActivation.poll();
-//            if (activation == null) break;
             // activation belongs to a currently running composition, so let it pass
             if (runningCompositionSet.contains(activation.getCause())) {
                 invocationQueue.add(activation);
@@ -178,7 +177,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
                 runningCompositionSet.add(activation.getCause());
                 invocationQueue.add(activation);
             }
-        } while (!sortedActivation.isEmpty());
+        }
 
         return invocationQueue;
     }
@@ -203,7 +202,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
             compositionPriorityMap.keySet().removeAll(toRemove);
             final int sizeAfterUpdate = compositionPriorityMap.size();
             if (sizeBeforeUpdate > sizeAfterUpdate) {
-                LOG.trace("[RCPQFIFO] Pruned {} activations from compositions map (actual size: {}) - time delta {} ms.",
+                LOG.trace("[RCPQFIFO] Pruning - Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
                         sizeBeforeUpdate - sizeAfterUpdate, sizeAfterUpdate, delta);
             }
         }

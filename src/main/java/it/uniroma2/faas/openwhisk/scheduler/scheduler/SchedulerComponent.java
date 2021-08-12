@@ -156,7 +156,7 @@ public class SchedulerComponent {
             closeables.add(healthKafkaConsumer);
             // register events kafka consumer
             final EventKafkaConsumer eventKafkaConsumer = new EventKafkaConsumer(
-                    List.of(EVENTS_TOPIC), kafkaConsumerProperties, 500
+                    List.of(EVENTS_TOPIC), kafkaConsumerProperties, 50
             );
             eventKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(eventKafkaConsumer);

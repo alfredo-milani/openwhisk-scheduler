@@ -50,7 +50,6 @@
     As v0.0.36 - v0.4.16.
     Minor bug fix in ShortestJobFirst Policy.
 
-- v0.0.41 - v0.4.25
+- v0.0.43 - v0.4.27
     As v0.0.37 - v0.4.17.
     Added RunningCompositionPQFIFO policy.
-    Note, with RCPQFIFO has been modified BufferedSchheduler to correctly use this policy, so it need to be modified to use previous policies.

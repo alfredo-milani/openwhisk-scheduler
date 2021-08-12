@@ -260,7 +260,7 @@ public class BufferedScheduler extends Scheduler {
                 }
                 if (!newActivations.isEmpty()) {
                     synchronized (mutex) {
-                        // RCPQFIFO POLICY
+                        // new approach
                         newActivations = (Queue<IBufferizable>) policy.apply(newActivations);
                         // try to schedule new activations (acquiring resources on invokers)
                         // note that if activationsBuffer is not empty no one activation contained in it
@@ -271,15 +271,17 @@ public class BufferedScheduler extends Scheduler {
                                 new ArrayList<>(invokersMap.values())
                         );
 
-                        // OTHERS POLICIES
-                        /*// try to schedule new activations (acquiring resources on invokers)
+                        // old approach
+                        /*
+                        // try to schedule new activations (acquiring resources on invokers)
                         // note that if activationsBuffer is not empty no one activation contained in it
                         //   can be scheduled so, when new activation arrive, try to schedule only these
                         final Queue<IBufferizable> scheduledActivations = schedule(
                                 // apply selected policy to new activations before scheduling them
                                 (Queue<IBufferizable>) policy.apply(newActivations),
                                 new ArrayList<>(invokersMap.values())
-                        );*/
+                        );
+                        */
 
                         // add all scheduled activations to invocation queue
                         invocationQueue.addAll(scheduledActivations);
