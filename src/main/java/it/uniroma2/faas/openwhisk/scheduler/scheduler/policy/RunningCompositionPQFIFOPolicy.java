@@ -5,6 +5,7 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ActivationEve
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,7 +53,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
 
     @Override
     public @Nonnull Queue<ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
-        final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(schedulables.size());
+        Queue<ISchedulable> invocationQueue = new ArrayDeque<>(schedulables.size());
 
         Queue<ISchedulable> compositionActivations = schedulables.stream()
                 .filter(Activation.class::isInstance)
@@ -69,12 +70,18 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
         if (compositionActivations.isEmpty()) return invocationQueue;
 
         synchronized (mutex) {
-            // update compositionActivations in-place with correct traced priority
-            compositionActivations = traceCompositionPriority(compositionActivations);
             // ensure that composition limit is preserved, enqueue all other compositions
             invocationQueue.addAll(checkCompositionLimit(compositionActivations));
             compositionActivations.removeAll(invocationQueue);
             compositionQueue.addAll(compositionActivations);
+            // update priority level for component activations, if any
+            invocationQueue = traceCompositionPriority(invocationQueue);
+
+            // log trace
+            if (LOG.getLevel().equals(Level.TRACE)) {
+                LOG.trace("[RCPQFIFO] Traced: {} - Running: {} - Queued: {}.",
+                        compositionPriorityMap.size(), runningCompositionSet.size(), compositionQueue.size());
+            }
         }
 
         return invocationQueue;
@@ -95,21 +102,29 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
                 .collect(toCollection(ArrayDeque::new));
         if (activationEvents.isEmpty()) return activationEvents;
 
-        final Queue<ISchedulable> invocationQueue = new ArrayDeque<>(consumables.size());
+        Queue<ISchedulable> invocationQueue = new ArrayDeque<>(consumables.size());
         synchronized (mutex) {
             for (final ActivationEvent activationEvent : activationEvents) {
                 final String activationId = activationEvent.getBody().getActivationId();
                 compositionPriorityMap.remove(activationId);
                 runningCompositionSet.remove(activationId);
-                LOG.trace(String.format("[RCPQFIFO] Update - removing composition %s - current size %s",
-                        activationId, compositionPriorityMap.size()));
+                /*LOG.trace(String.format("[RCPQFIFO] Update - removing composition %s - current size %s",
+                        activationId, compositionPriorityMap.size()));*/
             }
 
             if (runningCompositionSet.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
                 invocationQueue.addAll(checkCompositionLimit(compositionQueue));
                 compositionQueue.removeAll(invocationQueue);
-                LOG.trace(String.format("[RCPQFIFO] Update - Scheduled %d previously buffered composition.",
-                        invocationQueue.size()));
+                // update priority level for component activations, if any
+                invocationQueue = traceCompositionPriority(invocationQueue);
+                /*LOG.trace(String.format("[RCPQFIFO] Update - Scheduled %d previously buffered composition.",
+                        invocationQueue.size()));*/
+            }
+
+            // log trace
+            if (LOG.getLevel().equals(Level.TRACE)) {
+                LOG.trace("[RCPQFIFO] Traced: {} - Running: {} - Queued: {}.",
+                        compositionPriorityMap.size(), runningCompositionSet.size(), compositionQueue.size());
             }
         }
 
@@ -139,16 +154,16 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
                         cause,
                         new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
                 );
-                LOG.trace("[RCPQFIFO] Tracer - new cause {} registered with priority {} (actual size: {}).",
-                        cause, priority, compositionPriorityMap.size());
+                /*LOG.trace("[RCPQFIFO] Tracer - new cause {} registered with priority {} (actual size: {}).",
+                        cause, priority, compositionPriorityMap.size());*/
                 tracedPriority.add(activation);
             // check if current activation has wrong priority
             } else {
                 final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
                 // if priority does not match, create new object with correct priority
                 if (priorityFromCompositionMap != priority) {
-                    LOG.trace("[RCPQFIFO] Tracer - updating activation {} with priority {}.",
-                            activation.getActivationId(), priorityFromCompositionMap);
+                    /*LOG.trace("[RCPQFIFO] Tracer - updating activation {} with priority {}.",
+                            activation.getActivationId(), priorityFromCompositionMap);*/
                     tracedPriority.add(activation.with(priorityFromCompositionMap));
                 } else {
                     tracedPriority.add(activation);
