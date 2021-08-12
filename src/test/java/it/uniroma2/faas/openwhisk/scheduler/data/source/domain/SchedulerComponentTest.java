@@ -92,7 +92,7 @@ public class SchedulerComponentTest {
 //         final IPolicy policy = PolicyFactory.createPolicy(Policy.SHORTEST_JOB_FIRST);
         final IPolicy policy = PolicyFactory.createPolicy(Policy.RUNNING_COMPOSITION_PQFIFO);
         if (policy.getPolicy() == Policy.RUNNING_COMPOSITION_PQFIFO) {
-            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(100);
+            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(12);
         }
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
@@ -103,7 +103,7 @@ public class SchedulerComponentTest {
             scheduler = new BufferedSchedulerMock(policy, activationsKafkaProducer);
             ((BufferedSchedulerMock) scheduler).setKafkaBootstrapServers("localhost:9092");
             ((BufferedSchedulerMock) scheduler).setBufferSize(500);
-            ((BufferedSchedulerMock) scheduler).setInvokerBufferLimit(5);
+            ((BufferedSchedulerMock) scheduler).setInvokerBufferLimit(3);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             final HealthKafkaConsumerMock healthKafkaConsumer = new HealthKafkaConsumerMock(
                     List.of(HEALTH_TOPIC), kafkaConsumerProperties, 2_000
@@ -113,7 +113,7 @@ public class SchedulerComponentTest {
             closeables.add(healthKafkaConsumer);
             // register events kafka consumer
             final EventKafkaConsumerMock eventKafkaConsumer = new EventKafkaConsumerMock(
-                    List.of(EVENT_TOPIC), kafkaConsumerProperties, 500
+                    List.of(EVENT_TOPIC), kafkaConsumerProperties, 50
             );
             eventKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(eventKafkaConsumer);

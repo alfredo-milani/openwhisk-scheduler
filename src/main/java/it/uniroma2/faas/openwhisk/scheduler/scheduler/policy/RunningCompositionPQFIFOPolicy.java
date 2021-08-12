@@ -150,6 +150,8 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
                     LOG.trace("[RCPQFIFO] Tracer - updating activation {} with priority {}.",
                             activation.getActivationId(), priorityFromCompositionMap);
                     tracedPriority.add(activation.with(priorityFromCompositionMap));
+                } else {
+                    tracedPriority.add(activation);
                 }
             }
         }
