@@ -26,7 +26,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer.COMPLETION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer.EVENT_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer.HEALTH_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.scheduler.Invoker.State.*;
 import static java.util.stream.Collectors.*;
@@ -312,11 +311,13 @@ public class BufferedScheduler extends Scheduler {
 
             if (!completions.isEmpty()) {
                 // invocation queue
-                final Queue<IBufferizable> invocationQueue;
+                Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
                 synchronized (mutex) {
                     // update policy's state, if needed
-                    // ignore result because it is only useful when an activation record is produced on EVENT_STREAM
-                    policy.update(completions);
+                    final Queue<IBufferizable> policyBufferedActivation =
+                            (Queue<IBufferizable>) policy.update(completions);
+                    if (policyBufferedActivation != null && !policyBufferedActivation.isEmpty())
+                        invocationQueue.addAll(policyBufferedActivation);
                     // contains id of invokers that have processed at least one completion
                     final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
                     // if no valid completion has been received, release lock immediately
@@ -379,10 +380,10 @@ public class BufferedScheduler extends Scheduler {
                     //   Nota: se non si forma coda sullo Scheduler, lo stato dello Scheduler e quello del Contoller
                     //   sono allineati e quindi il sistema funziona come di norma (sfruttando cioè il principio di
                     //   località implementato nel Controller)
-                    invocationQueue = schedule(
+                    invocationQueue.addAll(schedule(
                             activationsBuffer.getSortedBuffer(),
                             invokersWithCompletions
-                    );
+                    ));
                     // remove all scheduled activations from buffer
                     activationsBuffer.removeAll(invocationQueue);
 
@@ -391,43 +392,6 @@ public class BufferedScheduler extends Scheduler {
                         schedulingStats(invocationQueue);
                         resourcesStats(invokersMap);
                         bufferStats(activationsBuffer.getBuffer());
-                    }
-                }
-                // send activations
-                if (!invocationQueue.isEmpty())
-                    schedulerExecutors.networkIO().execute(() -> send(producer, invocationQueue));
-            }
-        } else if (stream.equals(EVENT_STREAM)) {
-            final Collection<IConsumable> events = data.stream()
-                    .filter(IConsumable.class::isInstance)
-                    .map(IConsumable.class::cast)
-                    .collect(toCollection(ArrayDeque::new));
-            LOG.trace("[EVT] - Processing {} events objects (over {} received).",
-                    events.size(), data.size());
-
-            if (!events.isEmpty()) {
-                // invocation queue
-                final Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
-                synchronized (mutex) {
-                    // returns previously buffered composition activations
-                    final Queue<IBufferizable> nextComposition = (Queue<IBufferizable>) policy.update(events);
-                    if (nextComposition != null && !nextComposition.isEmpty()) {
-                        // try to schedule activations
-                        invocationQueue.addAll(schedule(
-                                nextComposition,
-                                new ArrayList<>(invokersMap.values())
-                        ));
-                        // remove scheduled activations
-                        nextComposition.removeAll(invocationQueue);
-                        // buffering remaining activations
-                        activationsBuffer.addAll(nextComposition);
-
-                        // log trace
-                        if (LOG.getLevel().equals(Level.TRACE)) {
-                            schedulingStats(invocationQueue);
-                            resourcesStats(invokersMap);
-                            bufferStats(activationsBuffer.getBuffer());
-                        }
                     }
                 }
                 // send activations

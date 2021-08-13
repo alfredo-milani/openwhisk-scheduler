@@ -1,7 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ActivationEvent;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
@@ -13,6 +13,7 @@ import javax.annotation.Nonnull;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.stream.Collectors.toCollection;
@@ -42,10 +43,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
     // buffer containing all not scheduled composition activations
     private final Queue<ISchedulable> compositionQueue = new ArrayDeque<>();
     // contains activation ID cause for max compositions allowed in the system
-    private final HashSet<String> runningCompositionSet = new HashSet<>();
-    // schedulable with higher priority goes first, i.e., with highest priority value (integer)
-    private final Comparator<ISchedulable> inversePriorityComparator = (s1, s2) ->
-            Objects.requireNonNull(s2.getPriority()).compareTo(Objects.requireNonNull(s1.getPriority()));
+    private final HashMap<String, Integer> runningCompositionMap = new HashMap<>();
 
     public RunningCompositionPQFIFOPolicy() {
         schedulePeriodicActivities();
@@ -73,6 +71,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
             // ensure that composition limit is preserved, enqueue all other compositions
             invocationQueue.addAll(checkCompositionLimit(compositionActivations));
             compositionActivations.removeAll(invocationQueue);
+            // TODO - allow only max N composition in the queue (delete older ones)
             compositionQueue.addAll(compositionActivations);
             // update priority level for component activations, if any
             invocationQueue = traceCompositionPriority(invocationQueue);
@@ -80,7 +79,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
             // log trace
             if (LOG.getLevel().equals(Level.TRACE)) {
                 LOG.trace("[RCPQFIFO] Traced: {} - Running: {} - Queued: {}.",
-                        compositionPriorityMap.size(), runningCompositionSet.size(), compositionQueue.size());
+                        compositionPriorityMap.size(), runningCompositionMap.size(), compositionQueue.size());
             }
         }
 
@@ -95,24 +94,34 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
      */
     @Override
     public Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
-        final Queue<ActivationEvent> activationEvents = consumables.stream()
-                .filter(ActivationEvent.class::isInstance)
-                .map(ActivationEvent.class::cast)
-                .filter(e -> e.getBody().getConductor())
-                .collect(toCollection(ArrayDeque::new));
-        if (activationEvents.isEmpty()) return activationEvents;
-
+        final Collection<BlockingCompletion> blockingCompletions = consumables.stream()
+                .filter(BlockingCompletion.class::isInstance)
+                .map(BlockingCompletion.class::cast)
+                .filter(bc -> bc.getResponse() != null)
+                .collect(Collectors.toUnmodifiableList());
         Queue<ISchedulable> invocationQueue = new ArrayDeque<>(consumables.size());
+        if (blockingCompletions.isEmpty()) return invocationQueue;
+
         synchronized (mutex) {
-            for (final ActivationEvent activationEvent : activationEvents) {
-                final String activationId = activationEvent.getBody().getActivationId();
-                compositionPriorityMap.remove(activationId);
-                runningCompositionSet.remove(activationId);
-                /*LOG.trace(String.format("[RCPQFIFO] Update - removing composition %s - current size %s",
-                        activationId, compositionPriorityMap.size()));*/
+            for (final BlockingCompletion completion : blockingCompletions) {
+                final String cause = completion.getResponse().getCause();
+                final Integer remainingComponentActivation = runningCompositionMap.getOrDefault(cause, -1);
+
+                // no entry found in currently running composition
+                if (remainingComponentActivation < 0) {
+                    LOG.warn("Received completion {} for a non-traced composition (cause: {}).",
+                            completion.getResponse().getActivationId(), cause);
+                // composition completed
+                } else if (remainingComponentActivation - 1 == 0) {
+                    runningCompositionMap.remove(cause);
+                    compositionPriorityMap.remove(cause);
+                // reduce the number of remaining component activation needed to complete composition
+                } else {
+                    runningCompositionMap.put(cause, remainingComponentActivation - 1);
+                }
             }
 
-            if (runningCompositionSet.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
+            if (runningCompositionMap.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
                 invocationQueue.addAll(checkCompositionLimit(compositionQueue));
                 compositionQueue.removeAll(invocationQueue);
                 // update priority level for component activations, if any
@@ -124,7 +133,7 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
             // log trace
             if (LOG.getLevel().equals(Level.TRACE)) {
                 LOG.trace("[RCPQFIFO] Traced: {} - Running: {} - Queued: {}.",
-                        compositionPriorityMap.size(), runningCompositionSet.size(), compositionQueue.size());
+                        compositionPriorityMap.size(), runningCompositionMap.size(), compositionQueue.size());
             }
         }
 
@@ -187,11 +196,18 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
         final Queue<ISchedulable> sortedActivation = super.apply(activations);
         while (!sortedActivation.isEmpty()) {
             final Activation activation = (Activation) sortedActivation.poll();
+            final String cause = activation.getCause();
             // activation belongs to a currently running composition, so let it pass
-            if (runningCompositionSet.contains(activation.getCause())) {
+            if (runningCompositionMap.containsKey(cause)) {
                 invocationQueue.add(activation);
-            } else if (runningCompositionSet.size() < runningCompositionsLimit) {
-                runningCompositionSet.add(activation.getCause());
+            } else if (runningCompositionMap.size() < runningCompositionsLimit) {
+                Integer remainingComponentActivation = activation.getCmpLength();
+                if (remainingComponentActivation == null) {
+                    LOG.warn("[RCPQFIFO] Activation {} does not have cmpLength field and seems to belong to a composition (cause: {})",
+                            activation.getActivationId(), cause);
+                    remainingComponentActivation = 1;
+                }
+                runningCompositionMap.put(cause, remainingComponentActivation);
                 invocationQueue.add(activation);
             }
         }
@@ -209,13 +225,13 @@ public class RunningCompositionPQFIFOPolicy extends PriorityQueueFIFOPolicy {
         synchronized (mutex) {
             final int sizeBeforeUpdate = compositionPriorityMap.size();
             final Collection<String> toRemove = new ArrayDeque<>();
-            compositionPriorityMap.forEach((key, value) -> {
-                long timestamp = value.getValue();
+            compositionPriorityMap.forEach((cause, priorityTimestampEntry) -> {
+                long timestamp = priorityTimestampEntry.getValue();
                 if (now - timestamp > delta) {
-                    toRemove.add(key);
+                    toRemove.add(cause);
                 }
             });
-            runningCompositionSet.removeAll(toRemove);
+            runningCompositionMap.keySet().removeAll(toRemove);
             compositionPriorityMap.keySet().removeAll(toRemove);
             final int sizeAfterUpdate = compositionPriorityMap.size();
             if (sizeBeforeUpdate > sizeAfterUpdate) {

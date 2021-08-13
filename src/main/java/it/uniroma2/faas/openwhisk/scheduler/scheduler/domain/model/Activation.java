@@ -212,6 +212,7 @@ public final class Activation implements ITraceable, IBufferizable {
     public static final String K_SCHEDULER_DURATION = "duration";
     public static final String K_SCHEDULER_OVERLOAD = "overload";
     public static final String K_SCHEDULER_KIND = "kind";
+    public static final String K_SCHEDULER_CMP_LENGTH = "cmpLength";
     public static final String K_SCHEDULER_LIMITS = "limits";
     public static final String K_SCHEDULER_LIMITS_CONCURRENCY = "concurrency";
     public static final String K_SCHEDULER_LIMITS_MEMORY = "memory";
@@ -240,6 +241,8 @@ public final class Activation implements ITraceable, IBufferizable {
     private final Boolean overload;
     // action runtime description
     private final String kind;
+    // composition's length: number of components action
+    private final Integer cmpLength;
     // limits for current activation
     private final Long concurrencyLimit;
     private final Long memoryLimit;
@@ -270,6 +273,7 @@ public final class Activation implements ITraceable, IBufferizable {
         Integer priority = null;
         Boolean overload = null;
         String kind = null;
+        Integer cmpLength = null;
         Long concurrencyLimit = null;
         Long memoryLimit = null;
         Long timeLimit = null;
@@ -285,6 +289,8 @@ public final class Activation implements ITraceable, IBufferizable {
                 if (priorityNumber != null) priority = priorityNumber.intValue();
                 overload = (Boolean) scheduler.get(K_SCHEDULER_OVERLOAD);
                 kind = (String) scheduler.get(K_SCHEDULER_KIND);
+                Number cmpLengthNumber = (Number) scheduler.get(K_SCHEDULER_CMP_LENGTH);
+                if (cmpLengthNumber != null) cmpLength = cmpLengthNumber.intValue();
                 Map<String, Object> limits = (Map<String, Object>) scheduler.get(K_SCHEDULER_LIMITS);
                 if (limits != null) {
                     Number concurrencyNumber = (Number) limits.get(K_SCHEDULER_LIMITS_CONCURRENCY);
@@ -303,6 +309,7 @@ public final class Activation implements ITraceable, IBufferizable {
         this.creationTimestamp = Instant.now().toEpochMilli();
         this.overload = overload;
         this.kind = kind;
+        this.cmpLength = cmpLength;
         this.concurrencyLimit = concurrencyLimit;
         this.memoryLimit = memoryLimit;
         this.timeLimit = timeLimit;
@@ -467,6 +474,11 @@ public final class Activation implements ITraceable, IBufferizable {
     }
 
     @JsonIgnore
+    public @Nullable Integer getCmpLength() {
+        return cmpLength;
+    }
+
+    @JsonIgnore
     @Override
     public Long getConcurrencyLimit() {
         return concurrencyLimit;
@@ -523,6 +535,7 @@ public final class Activation implements ITraceable, IBufferizable {
                 ", creationTimestamp=" + creationTimestamp +
                 ", overload=" + overload +
                 ", kind='" + kind + '\'' +
+                ", cmpLength=" + cmpLength +
                 ", concurrencyLimit=" + concurrencyLimit +
                 ", memoryLimit=" + memoryLimit +
                 ", timeLimit=" + timeLimit +

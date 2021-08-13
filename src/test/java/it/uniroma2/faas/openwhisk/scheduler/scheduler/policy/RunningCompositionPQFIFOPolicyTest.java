@@ -1,10 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ActivationEvent;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -61,7 +58,7 @@ public class RunningCompositionPQFIFOPolicyTest {
                 "\"activationId\": \"%s\", \"blocking\": true, \"cause\": \"%s\", " +
                 "\"content\": {\"$composer\": {\"openwhisk\": {\"ignore_certs\": true}, \"redis\": {\"uri\": \"redis://10.64.2.252:6379\"}}, " +
                 "\"$scheduler\": {\"kind\": \"nodejs:10\", \"limits\": {\"concurrency\": 10, \"memory\": 256, \"timeout\": 60000, " +
-                "\"userMemory\": 2048}, \"overload\": false, \"priority\": %d, \"target\": \"invoker1\"}}, \"initArgs\": [], " +
+                "\"userMemory\": 2048}, \"overload\": false, \"priority\": %d, \"target\": \"invoker1\", \"cmpLength\": 1}}, \"initArgs\": [], " +
                 "\"lockedArgs\": {}, \"revision\": \"2-5e03f90f3b32b50df7c5cb3b36660122\", \"rootControllerIndex\": " +
                 "{\"asString\": \"0\", \"instanceType\": \"controller\"}, \"transid\": [\"Q1w7PbuBTN2Ie80xVKNWT1xmI2FWNsDC\", " +
                 "1617722325467, [\"PNu7ZGEuJVY77EqCurRjt21AL3FvqdgM\", 1617722325273]], \"user\": {\"authkey\": {\"api_key\": " +
@@ -88,14 +85,22 @@ public class RunningCompositionPQFIFOPolicyTest {
         assertEquals(activation2, invocationQueue.poll(), "Applied policy does not have the correct priority level, should be 2");
 
         // activationId: 5d04d8d3d7424c9484d8d3d742dc94b6
-        final String eventConductorRecord = "{\"body\": {\"activationId\": \"%s\", \"conductor\": true, " +
-                "\"duration\": 10304, \"initTime\": 0, \"kind\": \"sequence\", \"memory\": 256, \"name\": \"guest/img_man\", " +
-                "\"statusCode\": 0, \"waitTime\": 4}, \"eventType\": \"Activation\", \"namespace\": \"guest\", " +
-                "\"source\": \"controller0\", \"subject\": \"guest\", \"timestamp\": 1617722408277, \"userId\": " +
-                "\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}";
-        final ActivationEvent activationEvent = objectMapper.readValue(String.format(eventConductorRecord, activation3.getCause()), ActivationEvent.class);
-        final Collection<ActivationEvent> events = new ArrayList<>() {{
-            add(activationEvent);
+        final String blockingCompletionRecord = "{\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\"," +
+                "\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"response\":{\"activationId\":\"81785d241fe94fd2b85d241fe9bfd24e\"," +
+                "\"annotations\":[{\"key\":\"causedBy\",\"value\":\"sequence\"},{\"key\":\"path\",\"value\":\"guest/cmp\"}," +
+                "{\"key\":\"waitTime\",\"value\":960},{\"key\":\"kind\",\"value\":\"nodejs:10\"}," +
+                "{\"key\":\"timeout\",\"value\":false},{\"key\":\"limits\",\"value\":" +
+                "{\"concurrency\":3,\"logs\":10,\"memory\":256,\"timeout\":60000}}," +
+                "{\"key\":\"initTime\",\"value\":530}],\"cause\":\"%s\",\"duration\":613,\"end\":1613386872211," +
+                "\"logs\":[],\"name\":\"cmp\",\"namespace\":\"guest\",\"publish\":false,\"response\":{\"result\":{\"action\":\"/_/fn1\"," +
+                "\"method\":\"action\",\"params\":{\"$scheduler\":{\"duration\":7,\"limits\":{\"concurrency\":3,\"memory\":256," +
+                "\"timeout\":60000,\"userMemory\":2048},\"overload\":false,\"priority\":0,\"target\":\"invoker0\"}," +
+                "\"sleep_time\":5,\"user\":\"Kira\"},\"state\":{\"$composer\":{\"resuming\":true,\"session\":\"81785d241fe94fd2b85d241fe9bfd24e\"," +
+                "\"stack\":[],\"state\":2}}},\"size\":335,\"statusCode\":0},\"start\":1613386871598,\"subject\":\"guest\",\"version\":\"0.0.2\"}," +
+                "\"transid\":[\"Bh2gbKpjKcjV0Jj1GSlvv8cxQ8berti7\",1613386870556,[\"G6yqpDPu9WsjFdpZxIIS1CEe4sRzovMY\",1613386870514]]}";
+        final BlockingCompletion blockingCompletionActivation = objectMapper.readValue(String.format(blockingCompletionRecord, activation3.getCause()), BlockingCompletion.class);
+        final Collection<BlockingCompletion> events = new ArrayList<>() {{
+            add(blockingCompletionActivation);
         }};
         final Queue<? extends IConsumable> updateInvocationQueue = policy.update(events);
 
