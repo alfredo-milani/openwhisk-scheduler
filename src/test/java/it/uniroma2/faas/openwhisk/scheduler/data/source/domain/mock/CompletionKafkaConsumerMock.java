@@ -51,7 +51,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     private final String completionNonBlocking = "{\"activationId\":\"811bd520fa794dbe9bd520fa793dbef3\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"MSCztINkcSGlhgeQT6H7YJAPaDVNO0nK\",1612935312054]}";
     private final String completionFailure = "{\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":true,\"response\":\"9376ac0a2ed848abb6ac0a2ed818ab0b\",\"transid\":[\"VqtARfumgJ3EcWpjjUHRm8zGytUKseup\",1613235607414]}";
     private final String traceSJF = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/sjf_policy/completed0.txt";
-    private final String tracePriorityFIFO = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/priorityFIFO_policy/completed0.txt";
+    private final String runningCompositionScheduler = "/Volumes/Data/Projects/FaaS/OpenWhisk/openwhisk-scheduler/src/test/res/running_composition_scheduler/completed0.txt";
 
     private final Queue<String> completionQueue = new ArrayDeque<>(3) {{
         add("{\"activationId\":\"746e9b27a7bb4382ae9b27a7bb6382ec\",\"instance\":{\"instance\":0,\"instanceType\":\"invoker\",\"uniqueName\":\"owdev-invoker-0\",\"userMemory\":\"2147483648 B\"},\"isSystemError\":false,\"transid\":[\"sid_invokerHealth\",1613291769810]}");
@@ -65,7 +65,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
     private LineReader lineReader;
     {
         try {
-            lineReader = new LineReader(tracePriorityFIFO);
+            lineReader = new LineReader(runningCompositionScheduler);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -84,7 +84,7 @@ public class CompletionKafkaConsumerMock extends AbstractKafkaConsumer<Completio
         }
         final Collection<Completion> data = new ArrayDeque<>(10);
 
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 2; ++i) {
             final String record = lineReader.poll();
             try {
                 data.add(objectMapper.readValue(record, NonBlockingCompletion.class));

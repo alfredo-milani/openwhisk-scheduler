@@ -1,6 +1,8 @@
-package it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced;
+package it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock;
 
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.AdvancedScheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.RunningCompositionScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
@@ -18,12 +20,12 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
-import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer.COMPLETION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.ActivationKafkaConsumerMock.ACTIVATION_STREAM;
+import static it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.CompletionKafkaConsumerMock.COMPLETION_STREAM;
 import static it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy.DEFAULT_PRIORITY;
 import static java.util.stream.Collectors.toCollection;
 
-public class RunningCompositionScheduler extends AdvancedScheduler {
+public class RunningCompositionSchedulerMock extends AdvancedScheduler {
 
     private final static Logger LOG = LogManager.getLogger(RunningCompositionScheduler.class.getCanonicalName());
 
@@ -50,7 +52,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     // policy
     private final IPolicy PQFIFO = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
 
-    public RunningCompositionScheduler(final @Nonnull Scheduler scheduler) {
+    public RunningCompositionSchedulerMock(final @Nonnull Scheduler scheduler) {
         super(scheduler);
         // scheduler periodic activities
         schedulePeriodicActivities();
@@ -120,7 +122,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     private @Nonnull Queue<Activation> processCompositionCompletions(
             final @Nonnull Queue<BlockingCompletion> blockingCompletions) {
         // compositions generate only blocking activation (because of their dynamic nature)
-        final Queue<Activation> invocationQueue = new ArrayDeque<>(blockingCompletions.size());
+        Queue<Activation> invocationQueue = new ArrayDeque<>(blockingCompletions.size());
         if (blockingCompletions.isEmpty()) return invocationQueue;
 
         synchronized (mutex) {
@@ -132,11 +134,11 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
                 if (remainingComponentActivation < 0) {
                     LOG.warn("Received completion {} for a non-traced composition (cause: {}).",
                             completion.getResponse().getActivationId(), cause);
-                // composition completed
+                    // composition completed
                 } else if (remainingComponentActivation - 1 == 0) {
                     runningCompositionMap.remove(cause);
                     compositionPriorityMap.remove(cause);
-                // reduce the number of remaining component activation needed to complete composition
+                    // reduce the number of remaining component activation needed to complete composition
                 } else {
                     runningCompositionMap.put(cause, remainingComponentActivation - 1);
                 }

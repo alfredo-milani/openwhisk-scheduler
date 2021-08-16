@@ -1,6 +1,7 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.CompletionKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
@@ -43,6 +44,7 @@ public class SchedulerComponent {
     public static final String SCHEDULER_TOPIC = "scheduler";
     public static final String HEALTH_TOPIC = "health";
     public static final String EVENTS_TOPIC = "events";
+    public static final String COMPLETED0_TOPIC = "completed0";
 
     private final Config config;
 
@@ -169,6 +171,15 @@ public class SchedulerComponent {
             LOG.info("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             ((RunningCompositionScheduler) scheduler).setMaxBufferSize(config.getTracerSchedulerRcBufferLmit());
             ((RunningCompositionScheduler) scheduler).setRunningCompositionsLimit(config.getTracerSchedulerRcMaxCmp());
+
+            // register completion kafka consumer
+            // TODO - automatize completion kafka consumers as in BufferedScheduler
+            final CompletionKafkaConsumer completionKafkaConsumer = new CompletionKafkaConsumer(
+                    List.of(COMPLETED0_TOPIC), kafkaConsumerProperties, config.getKafkaPollTimeoutMs()
+            );
+            completionKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(completionKafkaConsumer);
+            closeables.add(completionKafkaConsumer);
         }
 
         activationsKafkaConsumer.register(List.of(scheduler));

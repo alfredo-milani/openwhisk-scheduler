@@ -1,8 +1,11 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source.domain;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.*;
+import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.RunningCompositionScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
@@ -91,7 +94,7 @@ public class SchedulerComponentTest {
 //         final IPolicy policy = PolicyFactory.createPolicy(Policy.SHORTEST_JOB_FIRST);
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
-        boolean tracerSchedulerOption = false;
+        boolean tracerSchedulerOption = true;
         boolean bufferedSchedulerOption = true;
         boolean healthScheckerSchedulerOption = false;
         if (bufferedSchedulerOption) {
@@ -106,19 +109,13 @@ public class SchedulerComponentTest {
             healthKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(healthKafkaConsumer);
             closeables.add(healthKafkaConsumer);
-            // register events kafka consumer
-            final EventKafkaConsumerMock eventKafkaConsumer = new EventKafkaConsumerMock(
-                    List.of(EVENT_TOPIC), kafkaConsumerProperties, 50
-            );
-            eventKafkaConsumer.register(List.of(scheduler));
-            dataSourceConsumers.add(eventKafkaConsumer);
-            closeables.add(eventKafkaConsumer);
         } else {
             scheduler = new BaseSchedulerMock(policy, activationsKafkaProducer);
         }
         LOG.trace("Creating Scheduler {}.", scheduler.getClass().getSimpleName());
 
         if (tracerSchedulerOption) {
+            /*
             scheduler = new TracerSchedulerMock(scheduler);
             LOG.trace("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             final EventKafkaConsumerMock eventKafkaConsumerMock = new EventKafkaConsumerMock(
@@ -127,6 +124,19 @@ public class SchedulerComponentTest {
             eventKafkaConsumerMock.register(List.of(scheduler));
             dataSourceConsumers.add(eventKafkaConsumerMock);
             closeables.add(eventKafkaConsumerMock);
+            */
+
+            scheduler = new RunningCompositionSchedulerMock(scheduler);
+            LOG.info("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
+            ((RunningCompositionSchedulerMock) scheduler).setMaxBufferSize(100);
+            ((RunningCompositionSchedulerMock) scheduler).setRunningCompositionsLimit(2);
+
+            final CompletionKafkaConsumerMock completionKafkaConsumer = new CompletionKafkaConsumerMock(
+                    List.of(HEALTH_TOPIC), kafkaConsumerProperties, 500
+            );
+            completionKafkaConsumer.register(List.of(scheduler));
+            dataSourceConsumers.add(completionKafkaConsumer);
+            closeables.add(completionKafkaConsumer);
         }
         if (healthScheckerSchedulerOption) {
             scheduler = new HealthCheckerSchedulerMock(scheduler);
