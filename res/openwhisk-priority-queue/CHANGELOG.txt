@@ -54,3 +54,16 @@ Questo file contiene un summary delle modifiche effettuate alla code base di Apa
 - 0.0.16
     - ShardingContainerPoolBalancer: viene sempre scelto il primo invoker in invokerToUse; setupActivation e sendActivationToInvoker agiscono normalemnte
     - CommonLoadBalancer: invia activation verso topic 'scheduler'
+
+- 0.0.17
+    - PrimitiveActions.scala: timeout composition > 60 min.
+
+- 0.0.18
+    - InvokerSupervisor.scala: deleted invokerTestAction: all invokers, from the point of view of the OW Controller, are always Healthy
+
+- 0.0.19
+    - come 0.0.18, aggiunti invoker con stato Healthy in InvokerPool#registerInvoker (InvokerSupervisor.scala)
+
+- 0.0.20
+    - come 0.0.19, esteso timeout a 60 min. anche per le component action di una composizione
+

@@ -680,8 +680,9 @@ scheduler:
   host: null
   log: "trace"
   policy: pass_through
-  rcpqfifo_max_cmp: "16"
   tracing: false
+  rc_max_cmp: "16"
+  rc_buffer_limit: "1000"
   buffering: false
   bufferSize: "1000"
   invokerBufferLimit: "0"

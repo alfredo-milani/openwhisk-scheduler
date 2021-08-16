@@ -4,12 +4,13 @@ import javax.annotation.Nonnull;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+/**
+ * Note: the {@link IPolicy} object should be idempotent.
+ */
 public enum Policy {
 
     PASS_THROUGH,
     PRIORITY_QUEUE_FIFO,
-    COMPOSITION_TRACER,
-    RUNNING_COMPOSITION_PQFIFO,
     SHORTEST_JOB_FIRST;
 
     public static @Nonnull Policy from(@Nonnull String policy) {

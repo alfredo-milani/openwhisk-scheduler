@@ -69,9 +69,13 @@ public class Application implements Runnable {
                 description = "If enabled, scheduler will trace actions belonging to composition in order to provide correct priority value.")
         private boolean schedulerTracer;
 
-        @CommandLine.Option(names = {"-r", "--max-cmp"}, arity = "1",
-                description = "Set max number of composition action when using RunningCompositionPQFIFOPolicy")
-        private Integer rcpqfifoMaxCmp;
+        @CommandLine.Option(names = {"-r", "--rc-max-cmp"}, arity = "1",
+                description = "Set max number of composition action when using RunningCompositionScheduler")
+        private Integer rcMaxCmp;
+
+        @CommandLine.Option(names = {"-R", "--rc-buffer-limit"}, arity = "1",
+                description = "For RunningCompositionScheduler, set max buffer size.")
+        private Integer rcBufferSize;
     }
 
     private static class Exclusive {
@@ -117,8 +121,10 @@ public class Application implements Runnable {
             config.setSchedulerBufferedHeartbeatPoll(flags.heartbeatPoll);
         if (flags.invokerBufferLimit != null)
             config.setSchedulerBufferedInvokerBufferLimit(flags.invokerBufferLimit);
-        if (flags.rcpqfifoMaxCmp != null)
-            config.setPolicyRcpqfifoMaxCmp(flags.rcpqfifoMaxCmp);
+        if (flags.rcMaxCmp != null)
+            config.setTracerSchedulerMaxCmp(flags.rcMaxCmp);
+        if (flags.rcBufferSize != null)
+            config.setTracerSchedulerRcBufferLimit(flags.rcBufferSize);
     }
 
     private @Nonnull Config createConfig() {

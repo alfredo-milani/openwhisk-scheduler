@@ -1,16 +1,14 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.EventKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.BaseKafkaProducer;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.TracerScheduler;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.RunningCompositionScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.config.Config;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.RunningCompositionPQFIFOPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -133,10 +131,6 @@ public class SchedulerComponent {
 
         // define scheduler
         final IPolicy policy = PolicyFactory.createPolicy(Policy.from(config.getSchedulerPolicy()));
-        if (policy.getPolicy() == Policy.RUNNING_COMPOSITION_PQFIFO) {
-            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(
-                    config.getPolicyRcpqfifoMaxCmp());
-        }
         LOG.info("Policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
         if (config.getSchedulerBuffered()) {
@@ -158,7 +152,8 @@ public class SchedulerComponent {
             scheduler = new BaseScheduler(policy, activationsKafkaProducer);
         }
         LOG.info("Created scheduler {}.", scheduler.getClass().getSimpleName());
-        if (config.getSchedulerTracer()) {  // TODO - delete
+        if (config.getSchedulerTracer()) {
+            /*
             scheduler = new TracerScheduler(scheduler);
             LOG.info("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
             // register events kafka consumer
@@ -168,6 +163,12 @@ public class SchedulerComponent {
             eventKafkaConsumer.register(List.of(scheduler));
             dataSourceConsumers.add(eventKafkaConsumer);
             closeables.add(eventKafkaConsumer);
+            */
+
+            scheduler = new RunningCompositionScheduler(scheduler);
+            LOG.info("Enabled scheduler functionality - {}.", scheduler.getClass().getSimpleName());
+            ((RunningCompositionScheduler) scheduler).setMaxBufferSize(config.getTracerSchedulerRcBufferLmit());
+            ((RunningCompositionScheduler) scheduler).setRunningCompositionsLimit(config.getTracerSchedulerRcMaxCmp());
         }
 
         activationsKafkaConsumer.register(List.of(scheduler));

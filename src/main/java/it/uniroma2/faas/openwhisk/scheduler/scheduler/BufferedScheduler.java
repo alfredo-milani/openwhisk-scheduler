@@ -231,7 +231,7 @@ public class BufferedScheduler extends Scheduler {
     public void newEvent(@Nonnull final UUID stream, @Nonnull final Collection<?> data) {
         // TODO - implement FSM with state pattern
         if (stream.equals(ACTIVATION_STREAM)) {
-            Collection<IBufferizable> newActivations = data.stream()
+            final Collection<IBufferizable> newActivations = data.stream()
                     .filter(IBufferizable.class::isInstance)
                     .map(IBufferizable.class::cast)
                     .collect(toCollection(ArrayDeque::new));
@@ -259,19 +259,6 @@ public class BufferedScheduler extends Scheduler {
                 }
                 if (!newActivations.isEmpty()) {
                     synchronized (mutex) {
-                        // new approach
-                        newActivations = (Queue<IBufferizable>) policy.apply(newActivations);
-                        // try to schedule new activations (acquiring resources on invokers)
-                        // note that if activationsBuffer is not empty no one activation contained in it
-                        //   can be scheduled so, when new activation arrive, try to schedule only these
-                        final Queue<IBufferizable> scheduledActivations = schedule(
-                                // apply selected policy to new activations before scheduling them
-                                (Queue<IBufferizable>) newActivations,
-                                new ArrayList<>(invokersMap.values())
-                        );
-
-                        // old approach
-                        /*
                         // try to schedule new activations (acquiring resources on invokers)
                         // note that if activationsBuffer is not empty no one activation contained in it
                         //   can be scheduled so, when new activation arrive, try to schedule only these
@@ -280,8 +267,6 @@ public class BufferedScheduler extends Scheduler {
                                 (Queue<IBufferizable>) policy.apply(newActivations),
                                 new ArrayList<>(invokersMap.values())
                         );
-                        */
-
                         // add all scheduled activations to invocation queue
                         invocationQueue.addAll(scheduledActivations);
                         // remove all scheduled activations
@@ -311,13 +296,10 @@ public class BufferedScheduler extends Scheduler {
 
             if (!completions.isEmpty()) {
                 // invocation queue
-                Queue<IBufferizable> invocationQueue = new ArrayDeque<>();
+                final Queue<IBufferizable> invocationQueue;
                 synchronized (mutex) {
                     // update policy's state, if needed
-                    final Queue<IBufferizable> policyBufferedActivation =
-                            (Queue<IBufferizable>) policy.update(completions);
-                    if (policyBufferedActivation != null && !policyBufferedActivation.isEmpty())
-                        invocationQueue.addAll(policyBufferedActivation);
+                    policy.update(completions);
                     // contains id of invokers that have processed at least one completion
                     final List<Invoker> invokersWithCompletions = processCompletions(completions, invokersMap);
                     // if no valid completion has been received, release lock immediately
@@ -380,10 +362,10 @@ public class BufferedScheduler extends Scheduler {
                     //   Nota: se non si forma coda sullo Scheduler, lo stato dello Scheduler e quello del Contoller
                     //   sono allineati e quindi il sistema funziona come di norma (sfruttando cioè il principio di
                     //   località implementato nel Controller)
-                    invocationQueue.addAll(schedule(
+                    invocationQueue = schedule(
                             activationsBuffer.getSortedBuffer(),
                             invokersWithCompletions
-                    ));
+                    );
                     // remove all scheduled activations from buffer
                     activationsBuffer.removeAll(invocationQueue);
 

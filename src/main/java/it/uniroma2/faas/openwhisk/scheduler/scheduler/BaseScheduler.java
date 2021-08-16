@@ -3,8 +3,10 @@ package it.uniroma2.faas.openwhisk.scheduler.scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IProducer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Activation;
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
+import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -14,7 +16,6 @@ import java.util.*;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.ActivationKafkaConsumer.ACTIVATION_STREAM;
-import static java.util.Collections.singleton;
 import static java.util.stream.Collectors.toCollection;
 
 /**
@@ -26,10 +27,17 @@ public class BaseScheduler extends Scheduler {
 
     private final static Logger LOG = LogManager.getLogger(BaseScheduler.class.getCanonicalName());
 
+    public static final int THREAD_COUNT_KAFKA_PRODUCERS = 5;
+
     private final List<ISubject> subjects = new ArrayList<>();
     // subclass can use scheduler's policy
     private final IPolicy policy;
     private final IProducer producer;
+    // over-allocate invoker's resource to let activations queue up on invoker
+    private final SchedulerExecutors schedulerExecutors = new SchedulerExecutors(
+            THREAD_COUNT_KAFKA_PRODUCERS,
+            0
+    );
 
     public BaseScheduler(@Nonnull IPolicy policy, @Nonnull IProducer producer) {
         checkNotNull(policy, "Policy can not be null.");
@@ -68,12 +76,15 @@ public class BaseScheduler extends Scheduler {
         LOG.trace("[ACT] Processing {} activations objects (over {} received).",
                 newActivations.size(), data.size());
 
-        if (!newActivations.isEmpty()) send(policy.apply(newActivations));
+        if (!newActivations.isEmpty())
+            Objects.requireNonNull(schedulerExecutors.networkIO())
+                    .execute(() -> send(producer, policy.apply(newActivations)));
     }
 
-    private void send(@Nonnull final Queue<? extends ISchedulable> schedulables) {
+    private void send(@Nonnull final IProducer producer,
+                      @Nonnull final Queue<? extends ISchedulable> schedulables) {
         final long schedulingTermination = Instant.now().toEpochMilli();
-        schedulables.forEach(schedulable -> {
+        for (final ISchedulable schedulable : schedulables) {
             // if activation has not target invoker, abort its processing
             if (schedulable.getTargetInvoker() == null) {
                 LOG.warn("Invalid target invoker (null) for activation with id {}.",
@@ -82,9 +93,9 @@ public class BaseScheduler extends Scheduler {
                 LOG.trace("Writing activation with id {} in {} topic.",
                         schedulable.getActivationId(), schedulable.getTargetInvoker());
                 producer.produce(schedulable.getTargetInvoker(),
-                        singleton(schedulable.with(schedulingTermination)));
+                        (IConsumable) schedulable.with(schedulingTermination));
             }
-        });
+        }
     }
 
     @Override

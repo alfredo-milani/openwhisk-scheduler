@@ -6,7 +6,6 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.RunningCompositionPQFIFOPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerExecutors;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -88,12 +87,8 @@ public class SchedulerComponentTest {
 
         // define scheduler
         // final IPolicy policy = PolicyFactory.createPolicy(Policy.PASS_THROUGH);
-        // final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
+         final IPolicy policy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
 //         final IPolicy policy = PolicyFactory.createPolicy(Policy.SHORTEST_JOB_FIRST);
-        final IPolicy policy = PolicyFactory.createPolicy(Policy.RUNNING_COMPOSITION_PQFIFO);
-        if (policy.getPolicy() == Policy.RUNNING_COMPOSITION_PQFIFO) {
-            ((RunningCompositionPQFIFOPolicy) policy).setRunningCompositionsLimit(12);
-        }
         LOG.trace("Scheduler policy selected: {}.", policy.getPolicy());
         Scheduler scheduler;
         boolean tracerSchedulerOption = false;

@@ -53,8 +53,10 @@ public class Config extends HashMap<String, Object> {
     public static final int V_DEFAULT_SCHEDULER_BUFFERED_INVOKER_BUFFER_LIMIT = 0;
     public static final String K_SCHEDULER_BUFFERED_HEARTBEAT_POLL = "scheduler.buffered.heartbeat_poll";
     public static final int V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL = 1_000;
-    public static final String K_POLICY_RCPQFIFO_MAX_CMP = "policy.rcpqfifo.max_cmp";
-    public static final int V_DEFAULT_POLICY_RCPQFIFO_MAX_CMP = 16;
+    public static final String K_SCHEDULER_TRACER_RC_MAX_CMP = "scheduler.tracer_rc.max_cmp";
+    public static final int V_DEFAULT_SCHEDULER_TRACER_RC_MAX_CMP = 16;
+    public static final String K_SCHEDULER_TRACER_RC_BUFFER_LIMIT = "scheduler.tracer_rc.buffer_limit";
+    public static final int V_DEFAULT_SCHEDULER_TRACER_RC_BUFFER_LIMIT = 3000;
     // Scheduler tracing functionality
     public static final String K_SCHEDULER_TRACER = "scheduler.tracer";
     public static final boolean V_DEFAULT_SCHEDULER_TRACER = false;
@@ -82,7 +84,8 @@ public class Config extends HashMap<String, Object> {
         put(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
         put(K_SCHEDULER_TRACER, V_DEFAULT_SCHEDULER_TRACER);
 
-        put(K_POLICY_RCPQFIFO_MAX_CMP, V_DEFAULT_POLICY_RCPQFIFO_MAX_CMP);
+        put(K_SCHEDULER_TRACER_RC_MAX_CMP, V_DEFAULT_SCHEDULER_TRACER_RC_MAX_CMP);
+        put(K_SCHEDULER_TRACER_RC_BUFFER_LIMIT, V_DEFAULT_SCHEDULER_TRACER_RC_BUFFER_LIMIT);
     }
 
     public void load() throws IOException {
@@ -139,7 +142,8 @@ public class Config extends HashMap<String, Object> {
         putInteger(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL, properties.get(K_SCHEDULER_BUFFERED_HEARTBEAT_POLL), V_DEFAULT_SCHEDULER_BUFFERED_HEARTBEAT_POLL);
         putBoolean(K_SCHEDULER_TRACER, properties.get(K_SCHEDULER_TRACER), V_DEFAULT_SCHEDULER_TRACER);
 
-        putInteger(K_POLICY_RCPQFIFO_MAX_CMP, properties.get(K_POLICY_RCPQFIFO_MAX_CMP), V_DEFAULT_POLICY_RCPQFIFO_MAX_CMP);
+        putInteger(K_SCHEDULER_TRACER_RC_MAX_CMP, properties.get(K_SCHEDULER_TRACER_RC_MAX_CMP), V_DEFAULT_SCHEDULER_TRACER_RC_MAX_CMP);
+        putInteger(K_SCHEDULER_TRACER_RC_BUFFER_LIMIT, properties.get(K_SCHEDULER_TRACER_RC_BUFFER_LIMIT), V_DEFAULT_SCHEDULER_TRACER_RC_BUFFER_LIMIT);
     }
 
     private void putObject(@Nonnull String key, @Nullable Object value, @Nullable Object defaultValue) {
@@ -305,13 +309,22 @@ public class Config extends HashMap<String, Object> {
         put(K_SCHEDULER_POLICY, schedulerPolicy);
     }
 
-    public int getPolicyRcpqfifoMaxCmp() {
-        return (int) get(K_POLICY_RCPQFIFO_MAX_CMP);
+    public int getTracerSchedulerRcMaxCmp() {
+        return (int) get(K_SCHEDULER_TRACER_RC_MAX_CMP);
     }
 
-    public void setPolicyRcpqfifoMaxCmp(int maxCmp) {
-        checkArgument(maxCmp > 0, "Policy RCPQFIFO max composition must be > 1.");
-        put(K_POLICY_RCPQFIFO_MAX_CMP, maxCmp);
+    public void setTracerSchedulerMaxCmp(int maxCmp) {
+        checkArgument(maxCmp > 0, "Parameter maxCmp for RunningCompositionScheduler must be > 1.");
+        put(K_SCHEDULER_TRACER_RC_MAX_CMP, maxCmp);
+    }
+
+    public int getTracerSchedulerRcBufferLmit() {
+        return (int) get(K_SCHEDULER_TRACER_RC_BUFFER_LIMIT);
+    }
+
+    public void setTracerSchedulerRcBufferLimit(int bufferLimit) {
+        checkArgument(bufferLimit > 0, "Parameter bufferLimit for RunningCompositionScheduler must be > 0.");
+        put(K_SCHEDULER_TRACER_RC_BUFFER_LIMIT, bufferLimit);
     }
 
     public boolean getSchedulerBuffered() {
@@ -327,7 +340,7 @@ public class Config extends HashMap<String, Object> {
     }
 
     public void setBufferedSchedulerBufferSize(int bufferSize) {
-        checkArgument(bufferSize > 0, "Buffer size must be > 0.");
+        checkArgument(bufferSize >= 0, "Buffer size must be >= 0.");
         put(K_SCHEDULER_BUFFERED_BUFFER_SIZE, bufferSize);
     }
 

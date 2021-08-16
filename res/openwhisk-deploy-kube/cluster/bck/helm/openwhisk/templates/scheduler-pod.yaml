@@ -86,11 +86,14 @@ spec:
           args:
             - "--log={{ .Values.scheduler.log }}"
             - "--policy={{ .Values.scheduler.policy }}"
-{{- if .Values.scheduler.rcpqfifo_max_cmp }}
-            - "--max-cmp={{ .Values.scheduler.rcpqfifo_max_cmp }}"
-{{- end }}
 {{- if .Values.scheduler.tracing }}
             - "--tracer-scheduler"
+{{- end }}
+{{- if .Values.scheduler.rc_max_cmp }}
+            - "--rc-max-cmp={{ .Values.scheduler.rc_max_cmp }}"
+{{- end }}
+{{- if .Values.scheduler.rc_buffer_limit }}
+            - "--rc-buffer-limit={{ .Values.scheduler.rc_buffer_limit }}"
 {{- end }}
 {{- if .Values.scheduler.buffering }}
             - "--buffered-scheduler"
