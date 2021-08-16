@@ -182,6 +182,9 @@ public class SchedulerComponent {
             closeables.add(completionKafkaConsumer);
         }
 
+        // TODO: Create an AdvancedSceduler which creates and manages all KafkaConsumer/Producer
+        //   this AdvancedScheduler, then, must be the last decoration in the scheduler's hierarchy
+
         activationsKafkaConsumer.register(List.of(scheduler));
         dataSourceConsumers.add(activationsKafkaConsumer);
         closeables.addAll(List.of(activationsKafkaConsumer, activationsKafkaProducer));

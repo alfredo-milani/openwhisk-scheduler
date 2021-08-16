@@ -1,11 +1,8 @@
 package it.uniroma2.faas.openwhisk.scheduler.data.source.domain;
 
 import it.uniroma2.faas.openwhisk.scheduler.data.source.domain.mock.*;
-import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.consumer.kafka.HealthKafkaConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.remote.producer.kafka.AbstractKafkaProducer;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
-import it.uniroma2.faas.openwhisk.scheduler.scheduler.advanced.RunningCompositionScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
