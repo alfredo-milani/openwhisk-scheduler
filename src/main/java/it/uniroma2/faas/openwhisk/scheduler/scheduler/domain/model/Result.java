@@ -33,9 +33,35 @@ public class Result {
      * }
      */
 
+    /*
+     * {
+     *   "response": {
+     *     "result": {
+     *       "error": "The action did not produce a valid response and exited unexpectedly."
+     *     },
+     *     "statusCode": 3
+     *   }
+     * }
+     */
+
+    /*
+     * {
+     *   "response": {
+     *     "result": {
+     *       "error": "Failed to provision resources to run the action."
+     *     },
+     *     "statusCode": 3
+     *   }
+     * }
+     */
+
+    public static final String ERROR = "error";
+
     private final Map<String, Object> result;
     private final Long size;
     private final Integer statusCode;
+
+    private final boolean error;
 
     @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
     public Result(@JsonProperty("result") Map<String, Object> result, @JsonProperty("size") Long size,
@@ -43,6 +69,8 @@ public class Result {
         this.result = result;
         this.size = size;
         this.statusCode = statusCode;
+
+        this.error = result == null || result.containsKey(ERROR);
     }
 
     public Map<String, Object> getResult() {
@@ -57,12 +85,17 @@ public class Result {
         return statusCode;
     }
 
+    public Boolean getError() {
+        return error;
+    }
+
     @Override
     public String toString() {
         return "Result{" +
                 "result=" + result +
                 ", size=" + size +
                 ", statusCode=" + statusCode +
+                ", error=" + error +
                 '}';
     }
 

@@ -113,7 +113,6 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     }
 
     /**
-     * TODO: manage errors
      *
      * @param blockingCompletions
      */
@@ -126,14 +125,16 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         synchronized (mutex) {
             for (final BlockingCompletion completion : blockingCompletions) {
                 final String cause = completion.getResponse().getCause();
-                final Integer remainingComponentActivation = runningCompositionMap.getOrDefault(cause, -1);
+                final boolean resultError = completion.getResponse().getResult().getError();
+                final int remainingComponentActivation = runningCompositionMap.getOrDefault(cause, -1);
 
                 // no entry found in currently running composition
                 if (remainingComponentActivation < 0) {
-                    LOG.warn("Received completion {} for a non-traced composition (cause: {}).",
+                    LOG.warn("[RCPQFIFO] Received completion {} for a non-traced composition (cause: {}).",
                             completion.getResponse().getActivationId(), cause);
                 // composition completed
-                } else if (remainingComponentActivation - 1 == 0) {
+                // receiving error in result in a component action, proactively remove the composition in the system
+                } else if (remainingComponentActivation - 1 == 0 || resultError) {
                     runningCompositionMap.remove(cause);
                     compositionPriorityMap.remove(cause);
                 // reduce the number of remaining component activation needed to complete composition
@@ -239,7 +240,11 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         final int totalDemand = compositionQueue.size() + activations.size();
         if (totalDemand > maxBufferSize) {
             int toRemove = totalDemand - maxBufferSize;
-            for (int i = 0; i < toRemove; ++i) ((ArrayDeque<Activation>) compositionQueue).removeLast();
+            final Queue<Activation> sortedCompositionQueue = (Queue<Activation>) PQFIFO.apply(compositionQueue);
+            final Queue<Activation> removedActivations = new ArrayDeque<>();
+            for (int i = 0; i < toRemove; ++i)
+                removedActivations.add(((ArrayDeque<Activation>) sortedCompositionQueue).removeLast());
+            compositionQueue.removeAll(removedActivations);
             LOG.trace("[RCPQFIFO] Reached buffer limit ({}) - discarding last {} activations.",
                     maxBufferSize, toRemove);
         }
