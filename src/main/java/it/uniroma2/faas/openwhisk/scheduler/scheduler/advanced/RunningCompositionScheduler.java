@@ -106,7 +106,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
             invocationQueue.addAll(traceCompositionPriority(allowedActivations));
 
             // log trace
-            if (LOG.getLevel().equals(Level.TRACE)) policyStat();
+            if (LOG.getLevel().equals(Level.TRACE)) policyStat("RCS|ACT");
         }
 
         return invocationQueue;
@@ -125,18 +125,21 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         synchronized (mutex) {
             for (final BlockingCompletion completion : blockingCompletions) {
                 final String cause = completion.getResponse().getCause();
-                final boolean resultError = completion.getResponse().getResult().getError();
+                final int statusCode = completion.getResponse().getResult().getStatusCode();
                 final int remainingComponentActivation = runningCompositionMap.getOrDefault(cause, -1);
 
                 // no entry found in currently running composition
                 if (remainingComponentActivation < 0) {
-                    LOG.warn("[RCPQFIFO] Received completion {} for a non-traced composition (cause: {}).",
+                    LOG.warn("[RCS] Received completion {} for a non-traced composition (cause: {}).",
                             completion.getResponse().getActivationId(), cause);
                 // composition completed
-                // receiving error in result in a component action, proactively remove the composition in the system
-                } else if (remainingComponentActivation - 1 == 0 || resultError) {
+                } else if (remainingComponentActivation - 1 == 0) {
                     runningCompositionMap.remove(cause);
                     compositionPriorityMap.remove(cause);
+                // component action exited with an error, remove it when receiving secondary activation
+                // so set its remaining component activation to 1
+                } else if (statusCode > 0) {
+                    runningCompositionMap.put(cause, 1);
                 // reduce the number of remaining component activation needed to complete composition
                 } else {
                     runningCompositionMap.put(cause, remainingComponentActivation - 1);
@@ -153,7 +156,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
             }
 
             // log trace
-            if (LOG.getLevel().equals(Level.TRACE)) policyStat();
+            if (LOG.getLevel().equals(Level.TRACE)) policyStat("RCS|CMP");
         }
 
         return invocationQueue;
@@ -217,7 +220,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
             final String cause = activation.getCause();
             // activation belongs to a currently running composition, so let it pass
             if (runningCompositionMap.containsKey(cause)) {
-                // note that component activation could not be sorted by applied policy, but this ndoes not matter
+                // note that component activation could not be sorted by applied policy, but does not matter
                 //   because they will be sorted by super.Scheduler
                 invocationQueue.add(activation);
             } else if (runningCompositionMap.size() < runningCompositionsLimit) {
@@ -252,9 +255,9 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         compositionQueue.addAll(activations);
     }
 
-    private void policyStat() {
-        LOG.trace("[RCPQFIFO] Traced: {} - Running: {} - Queued: {}.",
-                compositionPriorityMap.size(), runningCompositionMap.size(), compositionQueue.size());
+    private void policyStat(final String tag) {
+        LOG.trace("[{}] Traced: {} - Running: {} - Queued: {}.",
+                tag, compositionPriorityMap.size(), runningCompositionMap.size(), compositionQueue.size());
     }
 
     /**
