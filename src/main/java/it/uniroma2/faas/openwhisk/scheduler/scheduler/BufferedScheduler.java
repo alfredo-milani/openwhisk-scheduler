@@ -787,7 +787,7 @@ public class BufferedScheduler extends Scheduler {
     }
 
     public int getBufferSize() {
-        return activationsBuffer.getSize();
+        return activationsBuffer.getCapacity();
     }
 
     public void setBufferSize(int bufferSize) {

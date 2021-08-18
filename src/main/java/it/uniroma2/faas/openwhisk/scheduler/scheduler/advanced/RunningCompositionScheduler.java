@@ -29,29 +29,135 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
 
     public static final int THREAD_COUNT = 1;
     public static final long RUNNING_COMPOSITION_TIME_LIMIT_MS = TimeUnit.MINUTES.toMillis(60);
-    public static final int RUNNING_COMPOSITIONS_LIMIT = 10;
     public static final int MAX_BUFFER_SIZE = 1_000;
 
     private final SchedulerPeriodicExecutors schedulerPeriodicExecutors =
             new SchedulerPeriodicExecutors(0, THREAD_COUNT);
     private final Object mutex = new Object();
     private long runningCompositionTimeLimitMs = RUNNING_COMPOSITION_TIME_LIMIT_MS;
-    private int runningCompositionsLimit = RUNNING_COMPOSITIONS_LIMIT;
-    // see@ https://stackoverflow.com/questions/14148331/how-to-get-a-hashmap-value-with-three-values
-    // represent the state of currently active compositions - <PrimaryActivationID, <Priority, Timestamp>>
-    // using ConcurrentHashMap is sufficient to ensure correctness even if there are two threads operating on it
-    private final Map<String, Map.Entry<Integer, Long>> compositionPriorityMap = new HashMap<>();
     // buffer containing all not scheduled composition activations
     private final Queue<Activation> compositionQueue = new ArrayDeque<>();
-    // contains activation ID cause for max compositions allowed in the system
-    private final HashMap<String, Integer> runningCompositionMap = new HashMap<>();
+    // object containing info about running compositions
+    private final RunningComposition runningCompositions;
+    // object containing info about failed compositions
+    private final RunningComposition failedCompositions;
     // max buffer size
     private int maxBufferSize = MAX_BUFFER_SIZE;
     // policy
     private final IPolicy PQFIFO = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
 
+    // TODO -
+    //   - in completions sposta le composition con errore in un altra map così da non bloccare
+    //   - esegui simulazione con tutte actv con cause 62539782acb3452f939782acb3552f9a
+    private static class RunningComposition {
+        public static final int UNTRACKED_PRIORITY = Integer.MIN_VALUE;
+        public static final int UNTRACKED_RCA = Integer.MIN_VALUE;
+
+        private int limit;
+        private final HashMap<String, Long> creationMap = new HashMap<>();
+        private final HashMap<String, Integer> priorityMap = new HashMap<>();
+        private final HashMap<String, Integer> remainingComponentActionMap = new HashMap<>();
+
+        RunningComposition() {
+            this(Integer.MAX_VALUE);
+        }
+
+        RunningComposition(final int limit) {
+            checkArgument(limit > 0, "Limit must be > 0.");
+            this.limit = limit;
+        }
+
+        public int getLimit() {
+            return limit;
+        }
+
+        public void setLimit(int limit) {
+            checkArgument(limit > 0, "Limit must be > 0.");
+            this.limit = limit;
+        }
+
+        public boolean addComposition(final @Nonnull String cause) {
+            return addComposition(cause, UNTRACKED_PRIORITY, UNTRACKED_RCA);
+        }
+
+        public boolean addComposition(final @Nonnull String cause, final int priority,
+                                      final int remainingComponentAction) {
+            if (!hasCapacity()) return false;
+            creationMap.put(cause, Instant.now().toEpochMilli());
+            priorityMap.put(cause, priority);
+            remainingComponentActionMap.put(cause, remainingComponentAction);
+            return true;
+        }
+
+        public void removeComposition(final @Nonnull String cause) {
+            creationMap.remove(cause);
+            priorityMap.remove(cause);
+            remainingComponentActionMap.remove(cause);
+        }
+
+        public void pruneOlderThan(final long delta) {
+            checkArgument(delta > 0, "Delta must be > 0.");
+            final long now = Instant.now().toEpochMilli();
+            final HashSet<String> compositionToRemove = creationMap.entrySet().stream()
+                    .filter(entry -> now - entry.getValue() > delta)
+                    .map(Map.Entry::getKey)
+                    .collect(toCollection(HashSet::new));
+            creationMap.keySet().removeAll(compositionToRemove);
+            priorityMap.keySet().removeAll(compositionToRemove);
+            remainingComponentActionMap.keySet().removeAll(compositionToRemove);
+        }
+
+        public int getPriority(final @Nonnull String cause) {
+            return priorityMap.getOrDefault(cause, UNTRACKED_PRIORITY);
+        }
+
+        public int getRemainingComponentAction(final @Nonnull String cause) {
+            return remainingComponentActionMap.getOrDefault(cause, UNTRACKED_RCA);
+        }
+
+        public void setPriority(final @Nonnull String cause, final int newPriority) {
+            checkArgument(creationMap.containsKey(cause),
+                    "No composition found with cause {}.", cause);
+            priorityMap.put(cause, newPriority);
+        }
+
+        public void setRemainingComponentActionMap(final @Nonnull String cause, final int remainingComponentAction) {
+            checkArgument(creationMap.containsKey(cause),
+                    "No composition found with cause {}.", cause);
+            remainingComponentActionMap.put(cause, remainingComponentAction);
+        }
+
+        public int getCapacity() {
+            return limit;
+        }
+
+        public int getCurrentSize() {
+            return creationMap.size();
+        }
+
+        public boolean hasComposition(final @Nonnull String cause) {
+            return creationMap.containsKey(cause);
+        }
+
+        public boolean hasCapacity() {
+            return creationMap.size() < limit;
+        }
+
+        @Override
+        public String toString() {
+            return "RunningComposition{" +
+                    "limit=" + limit +
+                    ", creationMapSize=" + creationMap.size() +
+                    ", priorityMapSize=" + priorityMap.size() +
+                    ", remainingComponentActionMapSize=" + remainingComponentActionMap.size() +
+                    '}';
+        }
+    }
+
     public RunningCompositionScheduler(final @Nonnull Scheduler scheduler) {
         super(scheduler);
+        this.runningCompositions = new RunningComposition();
+        this.failedCompositions = new RunningComposition();
         // scheduler periodic activities
         schedulePeriodicActivities();
     }
@@ -96,14 +202,12 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         if (compositionActivations.isEmpty()) return invocationQueue;
 
         synchronized (mutex) {
-            final Queue<Activation> allowedActivations = checkCompositionLimit(compositionActivations);
+            invocationQueue.addAll(checkCompositionLimit(compositionActivations));
             // buffering all activation not contained in invocation queue
             buffering(compositionActivations.stream()
-                    .filter(actv -> !allowedActivations.contains(actv))
+                    .filter(actv -> !invocationQueue.contains(actv))
                     .collect(toCollection(ArrayDeque::new))
             );
-            // update priority level for component activations, if any
-            invocationQueue.addAll(traceCompositionPriority(allowedActivations));
 
             // log trace
             if (LOG.getLevel().equals(Level.TRACE)) policyStat("RCS|ACT");
@@ -125,33 +229,33 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         synchronized (mutex) {
             for (final BlockingCompletion completion : blockingCompletions) {
                 final String cause = completion.getResponse().getCause();
-                final int statusCode = completion.getResponse().getResult().getStatusCode();
-                final int remainingComponentActivation = runningCompositionMap.getOrDefault(cause, -1);
 
+                if (runningCompositions.hasComposition(cause)) {
+                    final int remainingComponentActivation = runningCompositions.getRemainingComponentAction(cause);
+                    final int statusCode = completion.getResponse().getResult().getStatusCode();
+
+                    // composition completed
+                    if (remainingComponentActivation - 1 == 0) {
+                        runningCompositions.removeComposition(cause);
+                    // component action exited with an error, remove it when receiving secondary activation
+                    // so set its remaining component activation to 1
+                    } else if (statusCode > 0) {
+                        runningCompositions.setRemainingComponentActionMap(cause, 1);
+                    // reduce the number of remaining component activation needed to complete composition
+                    } else {
+                        runningCompositions.setRemainingComponentActionMap(cause, remainingComponentActivation - 1);
+                    }
                 // no entry found in currently running composition
-                if (remainingComponentActivation < 0) {
-                    LOG.warn("[RCS] Received completion {} for a non-traced composition (cause: {}).",
-                            completion.getResponse().getActivationId(), cause);
-                // composition completed
-                } else if (remainingComponentActivation - 1 == 0) {
-                    runningCompositionMap.remove(cause);
-                    compositionPriorityMap.remove(cause);
-                // component action exited with an error, remove it when receiving secondary activation
-                // so set its remaining component activation to 1
-                } else if (statusCode > 0) {
-                    runningCompositionMap.put(cause, 1);
-                // reduce the number of remaining component activation needed to complete composition
                 } else {
-                    runningCompositionMap.put(cause, remainingComponentActivation - 1);
+                    LOG.warn("[RCS] Received completion {} for a not traced composition (cause: {}).",
+                            completion.getResponse().getActivationId(), cause);
                 }
             }
 
-            if (runningCompositionMap.size() < runningCompositionsLimit && !compositionQueue.isEmpty()) {
-                final Queue<Activation> allowedActivations = checkCompositionLimit(compositionQueue);
-                compositionQueue.removeAll(allowedActivations);
-                // update priority level for component activations, if any
-                invocationQueue.addAll(traceCompositionPriority(allowedActivations));
-                /*LOG.trace(String.format("[RCPQFIFO] Update - Scheduled %d previously buffered composition.",
+            if (runningCompositions.hasCapacity() && !compositionQueue.isEmpty()) {
+                invocationQueue.addAll(checkCompositionLimit(compositionQueue));
+                compositionQueue.removeAll(invocationQueue);
+                /*LOG.trace(String.format("[RCS] Update - Scheduled %d previously buffered composition.",
                         invocationQueue.size()));*/
             }
 
@@ -160,48 +264,6 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         }
 
         return invocationQueue;
-    }
-
-    /**
-     * Need external synchronization
-     *
-     * @param activations
-     */
-    private @Nonnull Queue<Activation> traceCompositionPriority(final Queue<Activation> activations) {
-        final Queue<Activation> tracedPriority = new ArrayDeque<>(activations.size());
-        for (final Activation activation : activations) {
-            final String cause = activation.getCause();
-            // probably the activation received does not belong to a composition
-//            if (cause == null) continue;
-
-            final int priority = activation.getPriority() == null
-                    ? DEFAULT_PRIORITY
-                    : activation.getPriority();
-            final Map.Entry<Integer, Long> priorityTimestampEntry = compositionPriorityMap.get(cause);
-            // create new entry
-            if (priorityTimestampEntry == null) {
-                compositionPriorityMap.put(
-                        cause,
-                        new AbstractMap.SimpleImmutableEntry<>(priority, Instant.now().toEpochMilli())
-                );
-                /*LOG.trace("[RCPQFIFO] Tracer - new cause {} registered with priority {} (actual size: {}).",
-                        cause, priority, compositionPriorityMap.size());*/
-                tracedPriority.add(activation);
-                // check if current activation has wrong priority
-            } else {
-                final Integer priorityFromCompositionMap = priorityTimestampEntry.getKey();
-                // if priority does not match, create new object with correct priority
-                if (priorityFromCompositionMap != priority) {
-                    /*LOG.trace("[RCPQFIFO] Tracer - updating activation {} with priority {}.",
-                            activation.getActivationId(), priorityFromCompositionMap);*/
-                    tracedPriority.add(activation.with(priorityFromCompositionMap));
-                } else {
-                    tracedPriority.add(activation);
-                }
-            }
-        }
-
-        return tracedPriority;
     }
 
     /**
@@ -218,20 +280,36 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         while (!sortedActivation.isEmpty()) {
             final Activation activation = (Activation) sortedActivation.poll();
             final String cause = activation.getCause();
+            Integer priority = activation.getPriority();
+            Integer remainingComponentActivation = activation.getCmpLength();
+            if (priority == null) {
+                LOG.trace("[RCS] Activation {} does not have priority field (cause: {}) - setting default ({}).",
+                        activation.getActivationId(), cause, DEFAULT_PRIORITY);
+                priority = DEFAULT_PRIORITY;
+            }
+            if (remainingComponentActivation == null) {
+                LOG.trace("[RCS] Activation {} does not have cmpLength field (cause: {}) - setting default ({}).",
+                        activation.getActivationId(), cause, 1);
+                remainingComponentActivation = 1;
+            }
+
             // activation belongs to a currently running composition, so let it pass
-            if (runningCompositionMap.containsKey(cause)) {
+            // cause is always not null at this point
+            if (runningCompositions.hasComposition(cause)) {
                 // note that component activation could not be sorted by applied policy, but does not matter
                 //   because they will be sorted by super.Scheduler
-                invocationQueue.add(activation);
-            } else if (runningCompositionMap.size() < runningCompositionsLimit) {
-                Integer remainingComponentActivation = activation.getCmpLength();
-                if (remainingComponentActivation == null) {
-                    LOG.warn("[RCPQFIFO] Activation {} does not have cmpLength field and seems to belong to a composition (cause: {})",
-                            activation.getActivationId(), cause);
-                    remainingComponentActivation = 1;
+                final int tracedPriority = runningCompositions.getPriority(cause);
+                // if priority does not match, create new object with correct priority
+                if (tracedPriority != priority) {
+                    /*LOG.trace("[RCS] Tracer - updating activation {} with priority {}.",
+                            activation.getActivationId(), priorityFromCompositionMap);*/
+                    invocationQueue.add(activation.with(tracedPriority));
+                } else {
+                    invocationQueue.add(activation);
                 }
+            } else if (runningCompositions.hasCapacity()) {
                 // new composition registered in the system
-                runningCompositionMap.put(cause, remainingComponentActivation);
+                runningCompositions.addComposition(cause, priority, remainingComponentActivation);
                 invocationQueue.add(activation);
             }
         }
@@ -256,8 +334,8 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     }
 
     private void policyStat(final String tag) {
-        LOG.trace("[{}] Traced: {} - Running: {} - Queued: {}.",
-                tag, compositionPriorityMap.size(), runningCompositionMap.size(), compositionQueue.size());
+        LOG.trace("[{}] Running={} - Queue={}.",
+                tag, runningCompositions.getCurrentSize(), compositionQueue.size());
     }
 
     /**
@@ -266,21 +344,12 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
      * @param delta
      */
     private void removeOldEntries(long delta) {
-        long now = Instant.now().toEpochMilli();
         synchronized (mutex) {
-            final int sizeBeforeUpdate = compositionPriorityMap.size();
-            final Collection<String> toRemove = new ArrayDeque<>();
-            compositionPriorityMap.forEach((cause, priorityTimestampEntry) -> {
-                long timestamp = priorityTimestampEntry.getValue();
-                if (now - timestamp > delta) {
-                    toRemove.add(cause);
-                }
-            });
-            runningCompositionMap.keySet().removeAll(toRemove);
-            compositionPriorityMap.keySet().removeAll(toRemove);
-            final int sizeAfterUpdate = compositionPriorityMap.size();
+            final int sizeBeforeUpdate = runningCompositions.getCurrentSize();
+            runningCompositions.pruneOlderThan(delta);
+            final int sizeAfterUpdate = runningCompositions.getCurrentSize();
             if (sizeBeforeUpdate > sizeAfterUpdate) {
-                LOG.trace("[RCPQFIFO] Pruning - Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
+                LOG.trace("[RCS] Pruning - Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",
                         sizeBeforeUpdate - sizeAfterUpdate, sizeAfterUpdate, delta);
             }
         }
@@ -306,12 +375,12 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     }
 
     public int getRunningCompositionsLimit() {
-        return runningCompositionsLimit;
+        return runningCompositions.getLimit();
     }
 
     public void setRunningCompositionsLimit(int runningCompositionsLimit) {
         checkArgument(runningCompositionsLimit > 0, "Running compositions limit must be > 0.");
-        this.runningCompositionsLimit = runningCompositionsLimit;
+        this.runningCompositions.setLimit(runningCompositionsLimit);
     }
 
     public long getMaxBufferSize() {
