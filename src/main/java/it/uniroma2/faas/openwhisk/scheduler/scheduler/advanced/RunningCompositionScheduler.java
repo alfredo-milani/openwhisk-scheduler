@@ -46,9 +46,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     // policy
     private final IPolicy PQFIFO = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
 
-    // TODO -
-    //   - in completions sposta le composition con errore in un altra map così da non bloccare
-    //   - esegui simulazione con tutte actv con cause 62539782acb3452f939782acb3552f9a
+    // TODO - esegui simulazione con tutte actv con cause 62539782acb3452f939782acb3552f9a
     private static class RunningComposition {
         public static final int UNTRACKED_PRIORITY = Integer.MIN_VALUE;
         public static final int UNTRACKED_RCA = Integer.MIN_VALUE;
@@ -98,13 +96,15 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         public void pruneOlderThan(final long delta) {
             checkArgument(delta > 0, "Delta must be > 0.");
             final long now = Instant.now().toEpochMilli();
-            final HashSet<String> compositionToRemove = creationMap.entrySet().stream()
+            creationMap.entrySet().stream()
                     .filter(entry -> now - entry.getValue() > delta)
                     .map(Map.Entry::getKey)
-                    .collect(toCollection(HashSet::new));
-            creationMap.keySet().removeAll(compositionToRemove);
-            priorityMap.keySet().removeAll(compositionToRemove);
-            remainingComponentActionMap.keySet().removeAll(compositionToRemove);
+                    .collect(toCollection(HashSet::new))
+                    .forEach(cause -> {
+                        creationMap.remove(cause);
+                        priorityMap.remove(cause);
+                        remainingComponentActionMap.remove(cause);
+                    });
         }
 
         public int getPriority(final @Nonnull String cause) {
@@ -170,11 +170,13 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
             final Queue<Activation> simpleActivationQueue = data.stream()
                     .filter(Activation.class::isInstance)
                     .map(Activation.class::cast)
+                    .filter(actv -> actv.getCause() == null)
                     .collect(toCollection(ArrayDeque::new));
-            final Queue<Activation> compositionActivationQueue = simpleActivationQueue.stream()
+            final Queue<Activation> compositionActivationQueue = data.stream()
+                    .filter(Activation.class::isInstance)
+                    .map(Activation.class::cast)
                     .filter(actv -> actv.getCause() != null)
                     .collect(toCollection(ArrayDeque::new));
-            simpleActivationQueue.removeAll(compositionActivationQueue);
 
             invocationQueue.addAll(processCompositionActions(compositionActivationQueue));
             invocationQueue.addAll(simpleActivationQueue);
@@ -217,6 +219,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     }
 
     /**
+     * Need external synchronization
      *
      * @param blockingCompletions
      */
@@ -227,30 +230,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         if (blockingCompletions.isEmpty()) return invocationQueue;
 
         synchronized (mutex) {
-            for (final BlockingCompletion completion : blockingCompletions) {
-                final String cause = completion.getResponse().getCause();
-
-                if (runningCompositions.hasComposition(cause)) {
-                    final int remainingComponentActivation = runningCompositions.getRemainingComponentAction(cause);
-                    final int statusCode = completion.getResponse().getResult().getStatusCode();
-
-                    // composition completed
-                    if (remainingComponentActivation - 1 == 0) {
-                        runningCompositions.removeComposition(cause);
-                    // component action exited with an error, remove it when receiving secondary activation
-                    // so set its remaining component activation to 1
-                    } else if (statusCode > 0) {
-                        runningCompositions.setRemainingComponentActionMap(cause, 1);
-                    // reduce the number of remaining component activation needed to complete composition
-                    } else {
-                        runningCompositions.setRemainingComponentActionMap(cause, remainingComponentActivation - 1);
-                    }
-                // no entry found in currently running composition
-                } else {
-                    LOG.warn("[RCS] Received completion {} for a not traced composition (cause: {}).",
-                            completion.getResponse().getActivationId(), cause);
-                }
-            }
+            updateRemainingComponentAction(blockingCompletions);
 
             if (runningCompositions.hasCapacity() && !compositionQueue.isEmpty()) {
                 invocationQueue.addAll(checkCompositionLimit(compositionQueue));
@@ -266,19 +246,38 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         return invocationQueue;
     }
 
-    /**
-     * Need external synchronization
-     *
-     * @param activations
-     * @return
-     */
-    private @Nonnull Queue<Activation> checkCompositionLimit(final Queue<Activation> activations) {
-        final Queue<Activation> invocationQueue = new ArrayDeque<>(activations.size());
-        if (activations.isEmpty()) return invocationQueue;
+    private void updateRemainingComponentAction(final @Nonnull Queue<BlockingCompletion> blockingCompletions) {
+        for (final BlockingCompletion completion : blockingCompletions) {
+            final String cause = completion.getResponse().getCause();
 
-        final Queue<? extends ISchedulable> sortedActivation = PQFIFO.apply(activations);
-        while (!sortedActivation.isEmpty()) {
-            final Activation activation = (Activation) sortedActivation.poll();
+            if (runningCompositions.hasComposition(cause)) {
+                final int remainingComponentActivation = runningCompositions.getRemainingComponentAction(cause);
+                final int statusCode = completion.getResponse().getResult().getStatusCode();
+
+                // composition completed
+                if (remainingComponentActivation - 1 == 0) {
+                    runningCompositions.removeComposition(cause);
+                // component action exited with an error, remove it when receiving secondary activation
+                // so set its remaining component activation to 1
+                } else if (statusCode > 0) {
+                    runningCompositions.setRemainingComponentActionMap(cause, 1);
+                // reduce the number of remaining component activation needed to complete composition
+                } else {
+                    runningCompositions.setRemainingComponentActionMap(cause, remainingComponentActivation - 1);
+                }
+            // no entry found in currently running composition
+            } else {
+                LOG.warn("[RCS] Received completion {} for a not traced composition (cause: {}).",
+                        completion.getResponse().getActivationId(), cause);
+            }
+        }
+    }
+
+    private @Nonnull Queue<Activation> traceActivations(final @Nonnull Queue<Activation> activations) {
+        final Queue<Activation> tracedActivations = new ArrayDeque<>(activations.size());
+        if (activations.isEmpty()) return tracedActivations;
+
+        for (final Activation activation : activations) {
             final String cause = activation.getCause();
             Integer priority = activation.getPriority();
             Integer remainingComponentActivation = activation.getCmpLength();
@@ -293,22 +292,54 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
                 remainingComponentActivation = 1;
             }
 
+            // cause is always not null at this point
+            if (runningCompositions.hasComposition(cause)) {
+                Activation tracedActivation = activation;
+                final int tracedPriority = runningCompositions.getPriority(cause);
+                final int tracedRCA = runningCompositions.getRemainingComponentAction(cause);
+                // if priority does not match, create new object with correct priority
+                if (tracedPriority != priority) {
+                    tracedActivation = tracedActivation.with(tracedPriority);
+                    /*LOG.trace("[RCS] Tracer - updating activation {} with priority {}.",
+                            activation.getActivationId(), tracedPriority);*/
+                }
+                if (tracedRCA != remainingComponentActivation) {
+                    tracedActivation = tracedActivation.withCmpLength(tracedRCA);
+                    /*LOG.trace("[RCS] Tracer - updating activation {} with cmpLength {}.",
+                            activation.getActivationId(), tracedRCA);*/
+                }
+
+                tracedActivations.add(tracedActivation);
+            } else tracedActivations.add(activation);
+        }
+
+        return tracedActivations;
+    }
+
+    /**
+     * Need external synchronization
+     *
+     * @param activations
+     * @return
+     */
+    private @Nonnull Queue<Activation> checkCompositionLimit(final Queue<Activation> activations) {
+        final Queue<Activation> invocationQueue = new ArrayDeque<>(activations.size());
+        if (activations.isEmpty()) return invocationQueue;
+
+        final Queue<? extends ISchedulable> sortedActivation = PQFIFO.apply(traceActivations(activations));
+        while (!sortedActivation.isEmpty()) {
+            final Activation activation = (Activation) sortedActivation.poll();
+            final String cause = activation.getCause();
+            // these values can not be null because they are tuned in traceActivation method
+            final int priority = activation.getPriority();
+            final int remainingComponentActivation = activation.getCmpLength();
+
             // activation belongs to a currently running composition, so let it pass
             // cause is always not null at this point
             if (runningCompositions.hasComposition(cause)) {
-                // note that component activation could not be sorted by applied policy, but does not matter
-                //   because they will be sorted by super.Scheduler
-                final int tracedPriority = runningCompositions.getPriority(cause);
-                // if priority does not match, create new object with correct priority
-                if (tracedPriority != priority) {
-                    /*LOG.trace("[RCS] Tracer - updating activation {} with priority {}.",
-                            activation.getActivationId(), priorityFromCompositionMap);*/
-                    invocationQueue.add(activation.with(tracedPriority));
-                } else {
-                    invocationQueue.add(activation);
-                }
+                invocationQueue.add(activation);
             } else if (runningCompositions.hasCapacity()) {
-                // new composition registered in the system
+                // new composition (secondary activation) registered in the system
                 runningCompositions.addComposition(cause, priority, remainingComponentActivation);
                 invocationQueue.add(activation);
             }
@@ -317,20 +348,35 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         return invocationQueue;
     }
 
+    /**
+     * Need external synchronization
+     *
+     * @param activations
+     */
     private void buffering(final Queue<Activation> activations) {
+        if (activations.isEmpty()) return;
+        if (activations.size() > maxBufferSize) {
+            LOG.warn("[RCS] Too many activations received - rejecting {} activations.",
+                    activations.size() - maxBufferSize);
+        }
+
         final int totalDemand = compositionQueue.size() + activations.size();
         if (totalDemand > maxBufferSize) {
-            int toRemove = totalDemand - maxBufferSize;
-            final Queue<Activation> sortedCompositionQueue = (Queue<Activation>) PQFIFO.apply(compositionQueue);
-            final Queue<Activation> removedActivations = new ArrayDeque<>();
-            for (int i = 0; i < toRemove; ++i)
-                removedActivations.add(((ArrayDeque<Activation>) sortedCompositionQueue).removeLast());
-            compositionQueue.removeAll(removedActivations);
-            LOG.trace("[RCPQFIFO] Reached buffer limit ({}) - discarding last {} activations.",
+            final int toRemove = totalDemand - maxBufferSize;
+            // NOTE: inside compositionQueue should only be composition activation
+            //   so it is not necessary to trace them before apply the policy
+            PQFIFO.apply(compositionQueue).stream()
+                    .skip(Math.max(0L, (long) compositionQueue.size() - toRemove))
+                    .forEach(compositionQueue::remove);
+            LOG.trace("[RCS] Reached buffer limit ({}) - discarding last {} activations.",
                     maxBufferSize, toRemove);
         }
 
-        compositionQueue.addAll(activations);
+        // allow at most maxBufferSize activation into buffer at a time
+        int maxBufferedActivations = maxBufferSize;
+        for (final Activation activation : activations) {
+            if (maxBufferedActivations-- > 0) compositionQueue.add(activation);
+        }
     }
 
     private void policyStat(final String tag) {

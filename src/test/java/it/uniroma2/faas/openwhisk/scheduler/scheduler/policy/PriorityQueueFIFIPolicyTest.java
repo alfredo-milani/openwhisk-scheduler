@@ -65,4 +65,50 @@ public class PriorityQueueFIFIPolicyTest {
         return true;
     }
 
+    @Test
+    public void areActivationWithoutPriorityProcessedCorrectly() throws Exception {
+        final Random random = new Random();
+        final ObjectMapper objectMapper = new ObjectMapper();
+
+        final Collection<Activation> data = new ArrayDeque<>();
+        final String activationWithPriorityTemplate = "{\"action\": {\"name\": \"img_man\", \"path\": \"guest\", \"version\": \"0.0.2\"}, " +
+                "\"activationId\": \"3d1f6dbf0510484c9f6dbf0510d84cb4\", \"blocking\": true, \"cause\": \"a6fd3a808e5a4e63bd3a808e5abe6392\", " +
+                "\"content\": {\"$composer\": {\"openwhisk\": {\"ignore_certs\": true}, \"redis\": {\"uri\": \"redis://10.64.0.24:6379\"}}, " +
+                "\"$scheduler\": {\"cmpLength\": 7, \"kind\": \"nodejs:10\", \"limits\": {\"concurrency\": 5, " +
+                "\"memory\": 256, \"timeout\": 60000, \"userMemory\": 2048}, \"priority\": %d, \"target\": \"invoker0\"}}, \"initArgs\": [], " +
+                "\"lockedArgs\": {}, \"revision\": \"2-a2eafd736df4f013107b161f69267890\", \"rootControllerIndex\": {\"asString\": \"0\", " +
+                "\"instanceType\": \"controller\"}, \"transid\": [\"juI8HBMa0DNNfINnaqI1pZh1KYg65w4s\", 1629304522121, " +
+                "[\"9xhK5ksnGllej1wwQnUhACJ6NKDFmYVu\", 1629304522117]], \"user\": {\"authkey\": {\"api_key\": " +
+                "\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"}, " +
+                "\"limits\": {}, \"namespace\": {\"name\": \"guest\", \"uuid\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}, " +
+                "\"rights\": [\"READ\", \"PUT\", \"DELETE\", \"ACTIVATE\"], \"subject\": \"guest\"}}";
+        final String activationWithoutPriorityTemplate = "{\"action\": {\"name\": \"img_man\", \"path\": \"guest\", " +
+                "\"version\": \"0.0.2\"}, \"activationId\": \"3d1f6dbf0510484c9f6dbf0510d84cb4\", \"blocking\": true, " +
+                "\"cause\": \"a6fd3a808e5a4e63bd3a808e5abe6392\", \"content\": {\"$composer\": {\"openwhisk\": " +
+                "{\"ignore_certs\": true}, \"redis\": {\"uri\": \"redis://10.64.0.24:6379\"}}, \"$scheduler\": " +
+                "{\"cmpLength\": 7, \"kind\": \"nodejs:10\", \"limits\": {\"concurrency\": 5, \"memory\": 256, " +
+                "\"timeout\": 60000, \"userMemory\": 2048}, \"target\": \"invoker0\"}}, \"initArgs\": [], " +
+                "\"lockedArgs\": {}, \"revision\": \"2-a2eafd736df4f013107b161f69267890\", \"rootControllerIndex\": " +
+                "{\"asString\": \"0\", \"instanceType\": \"controller\"}, \"transid\": [\"juI8HBMa0DNNfINnaqI1pZh1KYg65w4s\", " +
+                "1629304522121, [\"9xhK5ksnGllej1wwQnUhACJ6NKDFmYVu\", 1629304522117]], \"user\": {\"authkey\": " +
+                "{\"api_key\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"}, " +
+                "\"limits\": {}, \"namespace\": {\"name\": \"guest\", \"uuid\": \"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"}, " +
+                "\"rights\": [\"READ\", \"PUT\", \"DELETE\", \"ACTIVATE\"], \"subject\": \"guest\"}}";
+
+        final Activation activationWithPriority = objectMapper.readValue(
+                String.format(activationWithPriorityTemplate, 4),
+                Activation.class
+        );
+        final Activation activationWithoutPriority = objectMapper.readValue(
+                String.format(activationWithoutPriorityTemplate),
+                Activation.class
+        );
+        data.add(activationWithPriority);
+        data.add(activationWithoutPriority);
+
+        final IPolicy priorityQueueFIFIPolicy = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
+        final Queue<? extends ISchedulable> sortedQueue = priorityQueueFIFIPolicy.apply(data);
+        sortedQueue.forEach(System.out::println);
+    }
+
 }

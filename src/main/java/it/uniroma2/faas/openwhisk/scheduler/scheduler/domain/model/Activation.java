@@ -346,6 +346,32 @@ public final class Activation implements ITraceable, IBufferizable {
     // TODO - implement deep copy
     // Current implementation provides a shallow copy
     @SuppressWarnings("unchecked")
+    public @Nonnull Activation withCmpLength(int cmpLength) {
+        checkArgument(cmpLength >= 0, "CmpLength must be > 0.");
+
+        Map<String, Object> content;
+        if (this.content == null) {
+            content = new HashMap<>();
+        } else {
+            content = new HashMap<>(this.content);
+        }
+        content.putIfAbsent(K_SCHEDULER, new HashMap<>());
+        final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
+        scheduler.put(K_SCHEDULER_CMP_LENGTH, cmpLength);
+
+        return new Activation(
+                this.getAction(), this.getActivationId(),
+                this.isBlocking(), this.getCause(),
+                content, this.getInitArgs(),
+                this.getLockedArgs(), this.getRevision(),
+                this.getRootControllerIndex(), this.getTransId(),
+                this.getUser()
+        );
+    }
+
+    // TODO - implement deep copy
+    // Current implementation provides a shallow copy
+    @SuppressWarnings("unchecked")
     @Override
     public @Nonnull Activation with(long schedulingTermination) {
         checkArgument(schedulingTermination >= 0, "Scheduling duration must be >= 0.");

@@ -54,7 +54,7 @@
     As v0.0.37 - v0.4.17.
     Added RunningCompositionPQFIFO policy.
 
-- 0.0.56 - v0.5.10
+- 0.0.59 - v0.5.15
     Removed RunningCompositionPQFIFO policy.
     Added RunningCompositionTracerScheduler as AdvancedScheduler substituing TracerScheduler component.
 
