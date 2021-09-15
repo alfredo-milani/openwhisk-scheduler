@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy.DEFAULT_PRIORITY;
 
 // @JsonInclude(JsonInclude.Include.NON_NULL)
 public final class Activation implements ITraceable, IBufferizable {
@@ -207,9 +208,10 @@ public final class Activation implements ITraceable, IBufferizable {
      */
 
     public static final String K_SCHEDULER = "$scheduler";
+    public static final String K_SCHEDULER_START = "start";
+    public static final String K_SCHEDULER_END = "end";
     public static final String K_SCHEDULER_TARGET = "target";
     public static final String K_SCHEDULER_PRIORITY = "priority";
-    public static final String K_SCHEDULER_DURATION = "duration";
     public static final String K_SCHEDULER_OVERLOAD = "overload";
     public static final String K_SCHEDULER_KIND = "kind";
     public static final String K_SCHEDULER_CMP_LENGTH = "cmpLength";
@@ -235,8 +237,6 @@ public final class Activation implements ITraceable, IBufferizable {
     private final String targetInvoker;
     // using Integer priority, there is not an upper bound to max priority
     private final Integer priority;
-    // at creation, contains creation timestamp
-    private final long creationTimestamp;
     // indicate invoker overloading
     private final Boolean overload;
     // action runtime description
@@ -284,9 +284,14 @@ public final class Activation implements ITraceable, IBufferizable {
             //   it is maintained to retrieve data for testing purpose
             Map<String, Object> scheduler = (Map<String, Object>) this.content.get(K_SCHEDULER);
             if (scheduler != null) {
+                // inject scheduler start timestamp
+                scheduler.put(K_SCHEDULER_START, Instant.now().toEpochMilli());
                 targetInvoker = (String) scheduler.get(K_SCHEDULER_TARGET);
                 Number priorityNumber = (Number) scheduler.get(K_SCHEDULER_PRIORITY);
-                if (priorityNumber != null) priority = priorityNumber.intValue();
+                if (priorityNumber != null)
+                    priority = priorityNumber.intValue();
+                else
+                    priority = DEFAULT_PRIORITY;
                 overload = (Boolean) scheduler.get(K_SCHEDULER_OVERLOAD);
                 kind = (String) scheduler.get(K_SCHEDULER_KIND);
                 Number cmpLengthNumber = (Number) scheduler.get(K_SCHEDULER_CMP_LENGTH);
@@ -306,7 +311,6 @@ public final class Activation implements ITraceable, IBufferizable {
         }
         this.targetInvoker = targetInvoker;
         this.priority = priority;
-        this.creationTimestamp = Instant.now().toEpochMilli();
         this.overload = overload;
         this.kind = kind;
         this.cmpLength = cmpLength;
@@ -384,7 +388,7 @@ public final class Activation implements ITraceable, IBufferizable {
         }
         content.putIfAbsent(K_SCHEDULER, new HashMap<>());
         final Map<String, Object> scheduler = (Map<String, Object>) content.get(K_SCHEDULER);
-        scheduler.put(K_SCHEDULER_DURATION, schedulingTermination - creationTimestamp);
+        scheduler.put(K_SCHEDULER_END, schedulingTermination);
 
         return new Activation(
                 this.getAction(), this.getActivationId(),
@@ -483,11 +487,6 @@ public final class Activation implements ITraceable, IBufferizable {
     }
 
     @JsonIgnore
-    public long getCreationTimestamp() {
-        return creationTimestamp;
-    }
-
-    @JsonIgnore
     @Override
     public @Nullable Boolean getOverload() {
         return overload;
@@ -558,7 +557,6 @@ public final class Activation implements ITraceable, IBufferizable {
                 ", user=" + user +
                 ", targetInvoker='" + targetInvoker + '\'' +
                 ", priority=" + priority +
-                ", creationTimestamp=" + creationTimestamp +
                 ", overload=" + overload +
                 ", kind='" + kind + '\'' +
                 ", cmpLength=" + cmpLength +
