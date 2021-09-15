@@ -8,7 +8,6 @@ import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.IPolicy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.Policy;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.policy.PolicyFactory;
 import it.uniroma2.faas.openwhisk.scheduler.util.SchedulerPeriodicExecutors;
-import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,7 +45,6 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
     // policy
     private final IPolicy PQFIFO = PolicyFactory.createPolicy(Policy.PRIORITY_QUEUE_FIFO);
 
-    // TODO - esegui simulazione con tutte actv con cause 62539782acb3452f939782acb3552f9a
     private static class RunningComposition {
         public static final int UNTRACKED_PRIORITY = Integer.MIN_VALUE;
         public static final int UNTRACKED_RCA = Integer.MIN_VALUE;
@@ -125,10 +123,6 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
             checkArgument(creationMap.containsKey(cause),
                     "No composition found with cause {}.", cause);
             remainingComponentActionMap.put(cause, remainingComponentAction);
-        }
-
-        public int getCapacity() {
-            return limit;
         }
 
         public int getCurrentSize() {
@@ -211,8 +205,8 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
                     .collect(toCollection(ArrayDeque::new))
             );
 
-            // log trace
-            if (LOG.getLevel().equals(Level.TRACE)) policyStat("RCS|ACT");
+            LOG.trace("[RCS|ACT] Running={} - Queue={} - Failed={}.",
+                    runningCompositions.getCurrentSize(), compositionQueue.size(), failedCompositions.getCurrentSize());
         }
 
         return invocationQueue;
@@ -235,12 +229,10 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
             if (runningCompositions.hasCapacity() && !compositionQueue.isEmpty()) {
                 invocationQueue.addAll(checkCompositionLimit(compositionQueue));
                 compositionQueue.removeAll(invocationQueue);
-                /*LOG.trace(String.format("[RCS] Update - Scheduled %d previously buffered composition.",
-                        invocationQueue.size()));*/
             }
 
-            // log trace
-            if (LOG.getLevel().equals(Level.TRACE)) policyStat("RCS|CMP");
+            LOG.trace("[RCS|CMP] Running={} - Queue={} - Failed={}.",
+                    runningCompositions.getCurrentSize(), compositionQueue.size(), failedCompositions.getCurrentSize());
         }
 
         return invocationQueue;
@@ -257,14 +249,21 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
                 // composition completed
                 if (remainingComponentActivation - 1 == 0) {
                     runningCompositions.removeComposition(cause);
+//                    LOG.trace("[RCS|CMP] Removing composition {}", cause);
                 // component action exited with an error, remove it when receiving secondary activation
                 // so set its remaining component activation to 1
                 } else if (statusCode > 0) {
-                    runningCompositions.setRemainingComponentActionMap(cause, 1);
+//                    runningCompositions.setRemainingComponentActionMap(cause, 1);
+                    runningCompositions.removeComposition(cause);
+                    failedCompositions.addComposition(cause);
+                    LOG.trace("[RCS|CMP] Composition {} return an error (statusCode={}).", cause, statusCode);
                 // reduce the number of remaining component activation needed to complete composition
                 } else {
                     runningCompositions.setRemainingComponentActionMap(cause, remainingComponentActivation - 1);
                 }
+            } else if (failedCompositions.hasComposition(cause)) {
+                LOG.trace("[RCS|CMP] Received failed composition {} - cause {}.",
+                        completion.getResponse().getActivationId(), completion.getResponse().getCause());
             // no entry found in currently running composition
             } else {
                 LOG.warn("[RCS] Received completion {} for a not traced composition (cause: {}).",
@@ -279,38 +278,39 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
 
         for (final Activation activation : activations) {
             final String cause = activation.getCause();
+            Activation tracedActivation = activation;
             Integer priority = activation.getPriority();
             Integer remainingComponentActivation = activation.getCmpLength();
             if (priority == null) {
                 LOG.trace("[RCS] Activation {} does not have priority field (cause: {}) - setting default ({}).",
                         activation.getActivationId(), cause, DEFAULT_PRIORITY);
                 priority = DEFAULT_PRIORITY;
+                tracedActivation = tracedActivation.with(priority);
             }
             if (remainingComponentActivation == null) {
                 LOG.trace("[RCS] Activation {} does not have cmpLength field (cause: {}) - setting default ({}).",
                         activation.getActivationId(), cause, 1);
                 remainingComponentActivation = 1;
+                tracedActivation = tracedActivation.withCmpLength(remainingComponentActivation);
             }
 
             // cause is always not null at this point
             if (runningCompositions.hasComposition(cause)) {
-                Activation tracedActivation = activation;
                 final int tracedPriority = runningCompositions.getPriority(cause);
                 final int tracedRCA = runningCompositions.getRemainingComponentAction(cause);
                 // if priority does not match, create new object with correct priority
                 if (tracedPriority != priority) {
                     tracedActivation = tracedActivation.with(tracedPriority);
-                    /*LOG.trace("[RCS] Tracer - updating activation {} with priority {}.",
-                            activation.getActivationId(), tracedPriority);*/
+                    LOG.trace("[RCS] Tracer - updating activation {} ({}) with priority {}.",
+                            activation.getActivationId(), cause, tracedPriority);
                 }
                 if (tracedRCA != remainingComponentActivation) {
                     tracedActivation = tracedActivation.withCmpLength(tracedRCA);
-                    /*LOG.trace("[RCS] Tracer - updating activation {} with cmpLength {}.",
-                            activation.getActivationId(), tracedRCA);*/
+                    LOG.trace("[RCS] Tracer - updating activation {} ({}) with cmpLength {}.",
+                            activation.getActivationId(), cause, tracedRCA);
                 }
-
-                tracedActivations.add(tracedActivation);
-            } else tracedActivations.add(activation);
+            }
+            tracedActivations.add(tracedActivation);
         }
 
         return tracedActivations;
@@ -336,7 +336,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
 
             // activation belongs to a currently running composition, so let it pass
             // cause is always not null at this point
-            if (runningCompositions.hasComposition(cause)) {
+            if (runningCompositions.hasComposition(cause) || failedCompositions.hasComposition(cause)) {
                 invocationQueue.add(activation);
             } else if (runningCompositions.hasCapacity()) {
                 // new composition (secondary activation) registered in the system
@@ -379,11 +379,6 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         }
     }
 
-    private void policyStat(final String tag) {
-        LOG.trace("[{}] Running={} - Queue={}.",
-                tag, runningCompositions.getCurrentSize(), compositionQueue.size());
-    }
-
     /**
      * Thread-safe
      *
@@ -393,6 +388,7 @@ public class RunningCompositionScheduler extends AdvancedScheduler {
         synchronized (mutex) {
             final int sizeBeforeUpdate = runningCompositions.getCurrentSize();
             runningCompositions.pruneOlderThan(delta);
+            failedCompositions.pruneOlderThan(delta * 2);
             final int sizeAfterUpdate = runningCompositions.getCurrentSize();
             if (sizeBeforeUpdate > sizeAfterUpdate) {
                 LOG.trace("[RCS] Pruning - Removed {} activations from compositions map (actual size: {}) - time delta {} ms.",

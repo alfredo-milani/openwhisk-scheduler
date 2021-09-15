@@ -17,5 +17,5 @@ alias docker-tag-push="$(realpath "$(dirname "${BASH_SOURCE}")")/tag_n_push.sh" 
 #
 alias sched-coll="$(realpath "$(dirname "${BASH_SOURCE}")")/stdout_collector.sh -s scheduler"  # @doc: Create a file with output of docker attach to specified container
 
-#
-alias docker-build-controller="$(realpath "$(dirname "${BASH_SOURCE}")/../res/openwhisk-priority-queue/script/docker_build.sh")"  # @doc: Creare docker image for Apache OpenWhisk project
+# changed: created 2 separate script to build Controller and Invoker
+# alias docker-build-controller="$(realpath "$(dirname "${BASH_SOURCE}")/../res/openwhisk-priority-queue/script/docker_build.sh")"  # @doc: Creare docker image for Apache OpenWhisk project

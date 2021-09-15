@@ -74,6 +74,20 @@
                 }
             },
             {
+                "kind": "python:sysbench",
+                "default": false,
+                "image": {
+                    "prefix": "alfredo94",
+                    "name": "python3action",
+                    "tag": "sysbench"
+                },
+                "deprecated": false,
+                "attached": {
+                    "attachmentName": "codefile",
+                    "attachmentType": "text/plain"
+                }
+            },
+            {
                 "kind": "python:3",
                 "default": true,
                 "image": {
