@@ -289,10 +289,11 @@ public class ActivationTest {
     public void givenTerminationSchedulingTimestamp_whenActivationSerialization_thenNoExceptionIsThrown() throws Exception {
         final ObjectMapper objectMapper = new ObjectMapper();
 
-        final String record = "{\"action\":{\"name\":\"test_annotations\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"0b307ee5a1304a57b07ee5a1300a57e7\",\"blocking\":true,\"content\":{\"key0\":\"value0\",\"key1\":\"value1\",\"key2\":\"value2\"},\"initArgs\":[],\"revision\":\"3-b3eeb1e516fd89366574c6051f024fa7\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"rxseFbQm3cy0QYASqVGkujB8lxEDE5Mu\",1609810319398],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}";
+        final String record = "{\"action\":{\"name\":\"test_annotations\",\"path\":\"guest\",\"version\":\"0.0.1\"},\"activationId\":\"0b307ee5a1304a57b07ee5a1300a57e7\",\"blocking\":true,\"content\":{\"$scheduler\":{},\"key0\":\"value0\",\"key1\":\"value1\",\"key2\":\"value2\"},\"initArgs\":[],\"revision\":\"3-b3eeb1e516fd89366574c6051f024fa7\",\"rootControllerIndex\":{\"asString\":\"0\",\"instanceType\":\"controller\"},\"transid\":[\"rxseFbQm3cy0QYASqVGkujB8lxEDE5Mu\",1609810319398],\"user\":{\"authkey\":{\"api_key\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502:123zO3xZCLrMN6v2BKK1dXYFpXlPkccOFqm12CdAsMgRU4VrNZ9lyGVCGuMDGIwP\"},\"limits\":{},\"namespace\":{\"name\":\"guest\",\"uuid\":\"23bc46b1-71f6-4ed5-8c54-816aa4f8c502\"},\"rights\":[\"READ\",\"PUT\",\"DELETE\",\"ACTIVATE\"],\"subject\":\"guest\"}}";
         final Activation activationRecord = objectMapper.readValue(record, Activation.class);
 
-        final long creationTimestamp = activationRecord.getCreationTimestamp();
+        final Map<String, Object> scheduler = (Map<String, Object>) activationRecord.getContent().get(Activation.K_SCHEDULER);
+        final long creationTimestamp = (long) scheduler.get(Activation.K_SCHEDULER_START);
         final long schedulingDuration = 100L;
         final long schedulingTermination = creationTimestamp + schedulingDuration;
 

@@ -100,7 +100,7 @@ public class SchedulerComponent {
             put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, config.getKafkaBootstrapServers());
             put(ConsumerConfig.GROUP_ID_CONFIG, "ow-scheduler-consumer");
             put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
-            put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 1_000);
+            put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 500);
             // end session after 15 s
             put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 15_000);
             put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, config.getKafkaFetchMinBytes());

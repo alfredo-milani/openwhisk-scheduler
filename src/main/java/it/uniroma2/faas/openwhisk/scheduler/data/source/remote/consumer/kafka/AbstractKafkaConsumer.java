@@ -4,7 +4,11 @@ import it.uniroma2.faas.openwhisk.scheduler.data.source.IConsumer;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.IObserver;
 import it.uniroma2.faas.openwhisk.scheduler.data.source.ISubject;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
+import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.KafkaFuture;
+import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -123,7 +127,43 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
         }
     }
 
-    protected void prepare() {
+    protected void prepare() throws Exception {
+        // topics creation
+        final Properties properties = new Properties() {{
+           put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaProperties.get(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG));
+        }};
+        final Admin admin = Admin.create(properties);
+        final ListTopicsResult listedTopics = admin.listTopics();
+        final Set<String> topicsSet = listedTopics.names().get();
+
+        // OpenWhisk default - to ensure FIFO ordering within topics
+        int partitions = 1;
+        // OpenWhisk lets admin configure this parameter in deploy configuration
+        // Here, let it hardcoded for simplicity
+        short replicationFactor = 1;
+
+        final Map<String, String> schedulerTopicConfig = new HashMap<>() {{
+            put(TopicConfig.SEGMENT_BYTES_CONFIG, "536870912");
+            put(TopicConfig.RETENTION_MS_CONFIG, "172800000");
+            put(TopicConfig.RETENTION_BYTES_CONFIG, "1073741824");
+            // in OpenWhisk this parameter is configured dynamically
+            put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "1054644");
+        }};
+        for (final String topic : topics) {
+            // topic already created by another component
+            if (topicsSet.contains(topic)) continue;
+
+            final NewTopic schedulerTopic = new NewTopic(topic, partitions, replicationFactor)
+                    .configs(schedulerTopicConfig);
+            final CreateTopicsResult schedulerTopicResult = admin.createTopics(Collections.singleton(schedulerTopic));
+            final KafkaFuture<Void> future = schedulerTopicResult.values().get(topic);
+            // blocks until topic creation or error
+            future.get();
+        }
+
+        admin.close();
+
+        // topics subscriptions
         consumer.subscribe(topics);
     }
 

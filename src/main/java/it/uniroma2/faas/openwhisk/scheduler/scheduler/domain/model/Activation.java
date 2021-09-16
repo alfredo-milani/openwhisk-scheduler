@@ -285,7 +285,8 @@ public final class Activation implements ITraceable, IBufferizable {
             Map<String, Object> scheduler = (Map<String, Object>) this.content.get(K_SCHEDULER);
             if (scheduler != null) {
                 // inject scheduler start timestamp
-                scheduler.put(K_SCHEDULER_START, Instant.now().toEpochMilli());
+                if (!scheduler.containsKey(K_SCHEDULER_START))
+                    scheduler.put(K_SCHEDULER_START, Instant.now().toEpochMilli());
                 targetInvoker = (String) scheduler.get(K_SCHEDULER_TARGET);
                 Number priorityNumber = (Number) scheduler.get(K_SCHEDULER_PRIORITY);
                 if (priorityNumber != null)

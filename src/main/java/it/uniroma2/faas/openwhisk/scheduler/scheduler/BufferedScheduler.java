@@ -78,7 +78,7 @@ public class BufferedScheduler extends Scheduler {
     private final Properties kafkaConsumerProperties = new Properties() {{
         put(ConsumerConfig.GROUP_ID_CONFIG, "ow-scheduler-consumer");
         put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
-        put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 1_000);
+        put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 500);
         put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 15_000);
         put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, 1);
         put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 500);
@@ -128,7 +128,10 @@ public class BufferedScheduler extends Scheduler {
          */
         public @Nonnull Queue<IBufferizable> getSortedBuffer() {
             if (!sorted) {
+                long startSorting = Instant.now().toEpochMilli();
                 buffer = (ArrayDeque<IBufferizable>) policy.apply(buffer);
+                long endSorting = Instant.now().toEpochMilli();
+                LOG.trace("[BUFFER SORTING] Sorting time: {} ms.", endSorting - startSorting);
                 sorted = true;
             }
             return buffer;
@@ -169,7 +172,12 @@ public class BufferedScheduler extends Scheduler {
             // remove old activations if buffer exceed its max size
             final int totalDemand = buffer.size() + elements.size();
             if (totalDemand > capacity) {
-                if (!sorted) buffer = (ArrayDeque<IBufferizable>) policy.apply(buffer);
+                if (!sorted) {
+                    long startSorting = Instant.now().toEpochMilli();
+                    buffer = (ArrayDeque<IBufferizable>) policy.apply(buffer);
+                    long endSorting = Instant.now().toEpochMilli();
+                    LOG.trace("[BUFFER SORTING] Sorting time: {} ms.", endSorting - startSorting);
+                }
                 int toRemove = totalDemand - capacity;
                 for (int i = 0; i < toRemove; ++i) buffer.removeLast();
                 LOG.debug("Reached buffer limit ({}) - discarding last {} activations.", capacity, toRemove);

@@ -58,3 +58,11 @@
     Removed RunningCompositionPQFIFO policy.
     Added RunningCompositionTracerScheduler as AdvancedScheduler substituing TracerScheduler component.
 
+- 0.0.63 - v0.5.19
+    Activaton's scheduling time duration removed; added insted timestamp of first deserialization (from Kafka)
+      and timestamp just before send it to Kafka. These timestamps are injected into content field of "$scheduler".
+
+- 0.0.65 - v0.5.21
+    Topic "scheduler" created at startup with the same configuration as OpenWhisk.
+    Added log trace to trace buffer ordering time.
+    Fixed scheduler execution time: now start and end time for an activation is traced correctly.
