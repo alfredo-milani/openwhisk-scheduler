@@ -66,3 +66,7 @@
     Topic "scheduler" created at startup with the same configuration as OpenWhisk.
     Added log trace to trace buffer ordering time.
     Fixed scheduler execution time: now start and end time for an activation is traced correctly.
+
+- 0.0.66 - v0.5.22
+    Removed log trace for sort buffer
+    Set some configuration params in kafka producer and consumer

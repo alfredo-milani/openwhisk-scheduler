@@ -128,10 +128,7 @@ public class BufferedScheduler extends Scheduler {
          */
         public @Nonnull Queue<IBufferizable> getSortedBuffer() {
             if (!sorted) {
-                long startSorting = Instant.now().toEpochMilli();
                 buffer = (ArrayDeque<IBufferizable>) policy.apply(buffer);
-                long endSorting = Instant.now().toEpochMilli();
-                LOG.trace("[BUFFER SORTING] Sorting time: {} ms.", endSorting - startSorting);
                 sorted = true;
             }
             return buffer;
@@ -173,10 +170,7 @@ public class BufferedScheduler extends Scheduler {
             final int totalDemand = buffer.size() + elements.size();
             if (totalDemand > capacity) {
                 if (!sorted) {
-                    long startSorting = Instant.now().toEpochMilli();
                     buffer = (ArrayDeque<IBufferizable>) policy.apply(buffer);
-                    long endSorting = Instant.now().toEpochMilli();
-                    LOG.trace("[BUFFER SORTING] Sorting time: {} ms.", endSorting - startSorting);
                 }
                 int toRemove = totalDemand - capacity;
                 for (int i = 0; i < toRemove; ++i) buffer.removeLast();

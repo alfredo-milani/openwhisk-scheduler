@@ -124,6 +124,9 @@ public class SchedulerComponent {
             // batch size up to 512 B, because test health activation contains ~600 chars
             //   a normal activation contains ~900 chars
             put(ProducerConfig.BATCH_SIZE_CONFIG, 512);
+            // at most block producer for x ms if broker is slow to accept records
+            put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 100);
+            put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 10);
             // put(ProducerConfig.LINGER_MS_CONFIG, 0);
             // put(ProducerConfig.BUFFER_MEMORY_CONFIG, 100 * 1024);
             put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
