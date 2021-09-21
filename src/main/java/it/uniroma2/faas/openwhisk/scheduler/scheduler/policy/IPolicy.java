@@ -23,9 +23,8 @@ public interface IPolicy {
      * Update state of policy, if implemented one has one.
      *
      * @param consumables collection of {@link IConsumable} needed to updated policy' state.
-     * @return
      */
-    Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables);
+    void update(@Nonnull final Collection<? extends IConsumable> consumables);
 
     /**
      * Retrieve policy type.

@@ -26,8 +26,8 @@ class PriorityQueueFIFOPolicy implements IPolicy {
     }
 
     @Override
-    public Queue<? extends IConsumable> update(final @Nonnull Collection<? extends IConsumable> consumables) {
-        return null;
+    public void update(final @Nonnull Collection<? extends IConsumable> consumables) {
+
     }
 
     @Override

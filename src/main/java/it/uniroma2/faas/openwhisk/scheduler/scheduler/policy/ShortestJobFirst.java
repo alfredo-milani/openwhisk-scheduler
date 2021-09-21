@@ -28,6 +28,8 @@ public class ShortestJobFirst implements IPolicy {
     // OPTIMIZE: implement mechanism to prune too old actions
     // need external synchronization, in case of multiple threads
     private final Map<Action, Long> actionDurationMap = new HashMap<>();
+    // queue containing all activation ids to update
+    private final Queue<String> activationIdQueue = new ArrayDeque<>();
 
     @Override
     public @Nonnull Queue<? extends ISchedulable> apply(@Nonnull final Collection<? extends ISchedulable> schedulables) {
@@ -53,8 +55,41 @@ public class ShortestJobFirst implements IPolicy {
         return invocationQueue;
     }
 
+    /* TODO - implement method to update action's execution time from CouchDB
+                to deal even with non-blocking calls
     @Override
-    public Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
+    public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
+        final Collection<Completion> completions = consumables.stream()
+                .filter(Completion.class::isInstance)
+                .map(Completion.class::cast)
+                .collect(Collectors.toUnmodifiableList());
+
+        for (final Completion completion : completions) {
+            final String activationId;
+            if (completion instanceof NonBlockingCompletion) {
+                activationId = ((NonBlockingCompletion) completion).getActivationId();
+            } else if (completion instanceof BlockingCompletion) {
+                activationId = ((BlockingCompletion) completion).getResponse().getActivationId();
+            } else {
+                activationId = null;
+            }
+
+            if (activationId == null || activationId.isEmpty() || activationId.isBlank()) continue;
+            activationIdQueue.add(activationId);
+        }
+
+
+
+        for (final BlockingCompletion completion : blockingCompletions) {
+            final Long newObservation = completion.getResponse().getDuration();
+            final Action action = getActionFrom(completion);
+            // update current estimation
+            actionDurationMap.merge(action, newObservation, ShortestJobFirst::estimate);
+        }
+    }*/
+
+    @Override
+    public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
         // only blocking completions have "annotations" field which contains action's "duration"
         // NOTE: to use ShortestJobFirst policy even with non-blocking action, must be implemented
         //   new Kafka consumer for topic "events" and must be enabled "user_events" in deploy configuration
@@ -66,26 +101,40 @@ public class ShortestJobFirst implements IPolicy {
                 .collect(Collectors.toUnmodifiableList());
 
         for (final BlockingCompletion completion : blockingCompletions) {
-            final Long newObservation = completion.getResponse().getDuration();
+            final long newObservation = getMetricFrom(completion, false);
             final Action action = getActionFrom(completion);
-
-            final Long currentEstimation = actionDurationMap.putIfAbsent(action, Long.MAX_VALUE);
-            // set first value
-            if (currentEstimation == null || currentEstimation == Long.MAX_VALUE) {
-                actionDurationMap.put(action, newObservation);
             // update current estimation
-            } else {
-                // update estimate value for each completion received, without respect to target invoker
-                actionDurationMap.put(action, estimate(currentEstimation, newObservation));
-            }
+            actionDurationMap.merge(action, newObservation, ShortestJobFirst::estimate);
         }
-
-        return null;
     }
 
     @Override
     public @Nonnull Policy getPolicy() {
         return POLICY;
+    }
+
+    /**
+     * New method to retrieve effective duration, since field "duration" includes "initTime".
+     *
+     * @param blockingCompletion
+     * @param includeInitTime
+     * @return
+     */
+    private static long getMetricFrom(@Nonnull final BlockingCompletion blockingCompletion,
+                                      final boolean includeInitTime) {
+        Long duration = blockingCompletion.getResponse().getDuration();
+        if (duration == null) return 0L;
+
+        if (!includeInitTime) {
+            final List<Map<String, Object>> annotations = blockingCompletion.getResponse().getAnnotations();
+            for (final Map<String, Object> annotation : annotations) {
+                if (annotation.get("key").equals("initTime"))
+                    duration -= (int) annotation.get("value");
+            }
+
+        }
+
+        return duration;
     }
 
     /**

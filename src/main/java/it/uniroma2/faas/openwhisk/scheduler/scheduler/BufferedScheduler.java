@@ -82,7 +82,7 @@ public class BufferedScheduler extends Scheduler {
         put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 15_000);
         put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, 1);
         put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 500);
-        put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 0);
+        put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 52428800);
         put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
     }};

@@ -18,8 +18,8 @@ class PassThroughPolicy implements IPolicy {
     }
 
     @Override
-    public Queue<? extends IConsumable> update(@Nonnull final Collection<? extends IConsumable> consumables) {
-        return null;
+    public void update(@Nonnull final Collection<? extends IConsumable> consumables) {
+
     }
 
     @Override

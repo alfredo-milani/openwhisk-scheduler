@@ -142,7 +142,7 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
         // Here, let it hardcoded for simplicity
         short replicationFactor = 1;
 
-        final Map<String, String> schedulerTopicConfig = new HashMap<>() {{
+        final Map<String, String> topicConfig = new HashMap<>() {{
             put(TopicConfig.SEGMENT_BYTES_CONFIG, "536870912");
             put(TopicConfig.RETENTION_MS_CONFIG, "172800000");
             put(TopicConfig.RETENTION_BYTES_CONFIG, "1073741824");
@@ -153,10 +153,10 @@ public abstract class AbstractKafkaConsumer<T extends IConsumable> implements IC
             // topic already created by another component
             if (topicsSet.contains(topic)) continue;
 
-            final NewTopic schedulerTopic = new NewTopic(topic, partitions, replicationFactor)
-                    .configs(schedulerTopicConfig);
-            final CreateTopicsResult schedulerTopicResult = admin.createTopics(Collections.singleton(schedulerTopic));
-            final KafkaFuture<Void> future = schedulerTopicResult.values().get(topic);
+            final NewTopic newTopic = new NewTopic(topic, partitions, replicationFactor)
+                    .configs(topicConfig);
+            final CreateTopicsResult topicResult = admin.createTopics(Collections.singleton(newTopic));
+            final KafkaFuture<Void> future = topicResult.values().get(topic);
             // blocks until topic creation or error
             future.get();
         }

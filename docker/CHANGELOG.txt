@@ -70,3 +70,11 @@
 - 0.0.66 - v0.5.22
     Removed log trace for sort buffer
     Set some configuration params in kafka producer and consumer
+
+- 0.0.67 - v0.5.23
+    Same as 0.0.66 - v0.5.22
+    Added in Kafka consumer within BufferredScheduler (those to fetch data from "completed" topci) kafka consumer configuration
+
+- 0.0.68 - v0.5.24
+    Same as 0.0.66 - v0.5.23
+    In ShortestJobFirstPolicy, computing metric as duration - initTime, since initTime includes container creation
