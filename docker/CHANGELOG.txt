@@ -75,6 +75,6 @@
     Same as 0.0.66 - v0.5.22
     Added in Kafka consumer within BufferredScheduler (those to fetch data from "completed" topci) kafka consumer configuration
 
-- 0.0.68 - v0.5.24
+- 0.0.70 - v0.5.26
     Same as 0.0.66 - v0.5.23
     In ShortestJobFirstPolicy, computing metric as duration - initTime, since initTime includes container creation

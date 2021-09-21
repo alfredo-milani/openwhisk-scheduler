@@ -1,10 +1,13 @@
 package it.uniroma2.faas.openwhisk.scheduler.scheduler.policy;
 
+import it.uniroma2.faas.openwhisk.scheduler.scheduler.BufferedScheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.Scheduler;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.Action;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.BlockingCompletion;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.IConsumable;
 import it.uniroma2.faas.openwhisk.scheduler.scheduler.domain.model.ISchedulable;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nonnull;
 import java.util.*;
@@ -22,6 +25,8 @@ import static java.util.stream.Collectors.toCollection;
  * probably they would have executed tha same action with noticeable difference.
  */
 public class ShortestJobFirst implements IPolicy {
+
+    private final static Logger LOG = LogManager.getLogger(BufferedScheduler.class.getCanonicalName());
 
     public static final Policy POLICY = Policy.SHORTEST_JOB_FIRST;
 
@@ -103,8 +108,14 @@ public class ShortestJobFirst implements IPolicy {
         for (final BlockingCompletion completion : blockingCompletions) {
             final long newObservation = getMetricFrom(completion, false);
             final Action action = getActionFrom(completion);
-            // update current estimation
-            actionDurationMap.merge(action, newObservation, ShortestJobFirst::estimate);
+            final Long currentEstimation = actionDurationMap.getOrDefault(action, Long.MAX_VALUE);
+            if (currentEstimation == Long.MAX_VALUE) {
+                // set first observation
+                actionDurationMap.put(action, newObservation);
+            } else {
+                // update current estimation
+                actionDurationMap.put(action, estimate(currentEstimation, newObservation));
+            }
         }
     }
 
