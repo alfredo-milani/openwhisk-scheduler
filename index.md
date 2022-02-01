@@ -1,37 +1,52 @@
-## Welcome to GitHub Pages
+---
+title: QoS-aware OpenWhisk
+---
 
-You can use the [editor on GitHub](https://github.com/alfredo-milani/openwhisk-scheduler/edit/gh-pages/index.md) to maintain and preview the content for your website in Markdown files.
+This is an extension of [Apache OpenWhisk](https://openwhisk.apache.org/) that
+introduces mechanisms and policies to support differentiated service classes and
+QoS enforcement.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+<img src="images/arch.png" alt="Architecture" style="width:40%;"/>
 
-### Markdown
+Our main contribution consists of the **Scheduler** component, which is
+responsible for managing a queue of pending activations and scheduling them 
+to the available Invokers according to a given policy. 
+The scheduler currently supports the following scheduling policies:
+ - priority-based FIFO
+ - shortest-job-first (SJF)
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+The scheduler introduces additional mechanisms to improve the system
+throughput in overload scenarios, especially as regards function compositions.
 
-```markdown
-Syntax highlighted code block
+Further information on the design and implementation of the project can be found 
+in the following paper:
 
-# Header 1
-## Header 2
-### Header 3
+>Gabriele Russo Russo, Alfredo Milani, Stefano Iannucci and Valeria
+>Cardellini,<br/>
+>**Towards QoS-Aware Function Composition Scheduling in Apache OpenWhisk**.
+>Proceedings of the 1st *LESS Workshop, March 2021. To appear.
 
-- Bulleted
-- List
+## Getting the source code
 
-1. Numbered
-2. List
+The associated source code is available in **two GitHub repositories**.
 
-**Bold** and _Italic_ and `Code` text
+The source code for the Scheduler and basic instructions for its usage
+can be found in the [here](https://github.com/alfredo-milani/openwhisk-scheduler).
 
-[Link](url) and ![Image](src)
-```
+Some of the introduced extensions require modifications of OpenWhisk
+components, i.e., the Controller and the Invoker. The extended version of
+OpenWhisk core is available in this
+[repository](https://github.com/alfredo-milani/openwhisk).
 
-For more details see [Basic writing and formatting syntax](https://docs.github.com/en/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax).
+## Authors
 
-### Jekyll Themes
+The project has been developed by Alfredo Milani, with the collaboration of
+[Valeria Cardellini](http://www.ce.uniroma2.it/~valeria), [Stefano Iannucci](https://scholar.google.com/citations?user=faF-XgoAAAAJ) and [Gabriele Russo Russo](http://www.ce.uniroma2.it/~russorusso).
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/alfredo-milani/openwhisk-scheduler/settings/pages). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+## License
 
-### Support or Contact
+This project is distributed under the terms of Apache License, Version 2.0 (the "License"); you may not use these files except in compliance
+with the License. You may obtain a copy of the License at <a href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a>. See the NOTICE file distributed with this work for additional information regarding copyright ownership. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the License for the specific language governing permissions and limitations under the License.
 
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://support.github.com/contact) and we’ll help you sort it out.
+
+
